@@ -49,3 +49,15 @@ Stats are roughly evaluated as Stat * Nature.
 2. go through moves a 2nd time, check whether the flags set change other moves
 
 ### Calculate Rating
+
+Add up ratings (sometimes done before already, sometimes several ratings influence each other so calc done here)
+
+---
+
+## Notes / Thoughts
+
+- currently i give penalty to move power if corresponding offensive stat is below a certain threshold, could change it to "scales with offensive stat" instead
+- could implement rating method for contact abilites based on own tankyness
+- currently weather from own ability is treated as always there for move calcs, could change to more realistic approach
+- interaction between different "rating groups" (like offense <-> move) not modular enough
+- truant by itself currently gives 0 rating, but makes all moves treated like having a cooldown turn after
