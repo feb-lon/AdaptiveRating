@@ -366,8 +366,8 @@ local function AdaptiveRating()
 		Utils.printDebug("defense rating: " .. defenseRating)
 
 		if speedRating < 0 and defenseRating < 0 then
-			Utils.printDebug("Distance to Speed Min: -" .. distanceToSpeedMinimum)
-			Utils.printDebug("Distance to Def Min: -" .. distanceToDefenseMinimum)
+			--Utils.printDebug("Distance to Speed Min: -" .. distanceToSpeedMinimum)
+			--Utils.printDebug("Distance to Def Min: -" .. distanceToDefenseMinimum)
 			noSpeedNoDefPenalty = (RS.Stats.Penalties.NoSpeedAndNoDefense.PenaltyMax or 0) * (1-(distanceToDefenseMinimum*distanceToSpeedMinimum)^0.5)
 			ratingTotal = ratingTotal - noSpeedNoDefPenalty
 			Utils.printDebug("No Defense No Speed Penalty: -" .. noSpeedNoDefPenalty)
@@ -459,7 +459,7 @@ local function AdaptiveRating()
 						if DoublesDmgOverTime[id] then
 							iMoves[i].powerRating = iMoves[i].powerRating * (RS.ModifierAndRatings.ModifierDoublesDamageOverTimePower or 1)
 						end
-						Utils.printDebug("Power Rating: " .. iMoves[i].powerRating)
+						--Utils.printDebug("Power Rating: " .. iMoves[i].powerRating)
 
 						local moveType = iMoves[i].move.type or PokemonData.Types.UNKNOWN
 
@@ -468,15 +468,15 @@ local function AdaptiveRating()
 						--Weather
 						if ownAbility == (AbilityData.Values.DrizzleId or 2) or ownAbility == (AbilityData.Values.DroughtId or 70) then
 							iMoves[i].powerRating = (self.getAbilityTypeModifiers[moveType] or 1) * iMoves[i].powerRating
-							Utils.printDebug("Weather: " .. iMoves[i].powerRating)
+							--Utils.printDebug("Weather modifies rating: " .. iMoves[i].powerRating)
 						end
 
 						if not IsTypelessMove[id] then -- Type Rating for moves with type
 							iMoves[i].powerRating = iMoves[i].powerRating * (RS.ModifierAndRatings.RatingMoveWithPowerType[moveType] or 1)
-							Utils.printDebug("Type Value: " .. iMoves[i].powerRating)
+							--Utils.printDebug("Type Value: " .. iMoves[i].powerRating)
 							if (not debug and Utils.isSTAB(iMoves[i].move, iMoves[i].move.type, pokemonTypes)) then
 								iMoves[i].powerRating = iMoves[i].powerRating * 1.5
-								Utils.printDebug("STAB: " .. iMoves[i].powerRating)
+								--Utils.printDebug("STAB modifies rating: " .. iMoves[i].powerRating)
 							end
 							if
 								PokemonData.Types.FLYING == iMoves[i].move.type or PokemonData.Types.ROCK == iMoves[i].move.type or
@@ -492,11 +492,11 @@ local function AdaptiveRating()
 						end
 						if IsHighCritMove[id] then -- High Crit Chance
 							iMoves[i].powerRating = iMoves[i].powerRating * (RS.ModifierAndRatings.ModifierHighCrit or 1)
-							Utils.printDebug("High Crit: " .. iMoves[i].powerRating)
+							--Utils.printDebug("High Crit modifies rating: " .. iMoves[i].powerRating)
 						end
 						if IsRecoilMove[id] and ownAbility ~= 69 then -- recoil move and no rock head
 							iMoves[i].powerRating = iMoves[i].powerRating * (RS.ModifierAndRatings.ModifierRecoil or 1)
-							Utils.printDebug("recoil no rockhead: " .. iMoves[i].powerRating)
+							--Utils.printDebug("Move has recoil, but no rockhead.  New rating: " .. iMoves[i].powerRating)
 						end
 
 						---- flat ratings
@@ -530,11 +530,11 @@ local function AdaptiveRating()
 								contactModifier = contactModifier * contactModifier
 							end
 							iMoves[i].powerRating = iMoves[i].powerRating * contactModifier
-							Utils.printDebug("is contact: " .. iMoves[i].powerRating)
+							--Utils.printDebug("is contact: " .. iMoves[i].powerRating)
 						end
 						if IsLowPriorityMove[id] then -- Low Priority
 							iMoves[i].powerRating = iMoves[i].powerRating * (1 - (RS.ModifierAndRatings.ModifierLowPriorityMin or 0)*speedValue)
-							Utils.printDebug("low prio: " .. iMoves[i].powerRating)
+							--Utils.printDebug("low prio: " .. iMoves[i].powerRating)
 						elseif IsHighPriorityMove[id] then --High Priority
 							iMoves[i].powerRating = iMoves[i].powerRating + (1-speedValue) * (RS.ModifierAndRatings.RatingHighPriorityMax or 1)
 							--Utils.printDebug("high prio: " .. iMoves[i].powerRating)
@@ -737,10 +737,10 @@ local function AdaptiveRating()
 			end
 			movesRating = movesRating + math.max(iMoves[i].rating, 0)
 		end
-		Utils.printDebug("total move Rating: " .. movesRating)
+		Utils.printDebug("total final move Rating: " .. movesRating)
 		ratingTotal = ratingTotal + movesRating
 
-		-- checking various conditions
+		-- checking various conditions, calculating total rating
 
 		if conditionsAchieved[conditions.hasPhysicalMove] == false then
 			phAtkRating = math.min(0, phAtkRating)

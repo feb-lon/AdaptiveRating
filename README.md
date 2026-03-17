@@ -61,3 +61,4 @@ Add up ratings (sometimes done before already, sometimes several ratings influen
 - currently weather from own ability is treated as always there for move calcs, could change to more realistic approach
 - interaction between different "rating groups" (like offense <-> move) not modular enough
 - truant by itself currently gives 0 rating, but makes all moves treated like having a cooldown turn after
+- Weatherball not implemented yet
