@@ -5,7 +5,7 @@ local function AdaptiveRating()
 	self.name = "AdaptiveRating"
 	self.author = "Feblon"
 	self.description = "Alternative to the default gachamon rating calculation."
-	self.github = "MyUsername/ExtensionRepo" -- Replace "MyUsername" and "ExtensionRepo" to match your GitHub repo url, if any TODO
+	self.github = "feb-lon/AdaptiveRating"
 	self.url = string.format("https://github.com/%s", self.github or "") -- Remove this attribute if no host website available for this extension
 	self.RS = {}
 
