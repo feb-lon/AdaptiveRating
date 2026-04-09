@@ -1,13 +1,14 @@
 local function AdaptiveRating()
 	-- Define descriptive attributes of the custom extension that are displayed on the Tracker settings
 	local self = {}
-	self.version = "1.0"
+	self.version = "0.1"
 	self.name = "AdaptiveRating"
 	self.author = "Feblon"
 	self.description = "Alternative to the default gachamon rating calculation."
 	self.github = "feb-lon/AdaptiveRating"
 	self.url = string.format("https://github.com/%s", self.github or "") -- Remove this attribute if no host website available for this extension
 	self.RS = {}
+	self.usedRuleset = {}
 
 	function self.checkForUpdates()
 		-- Update the pattern below to match your version. You can check what this looks like by visiting the latest release url on your repo
@@ -53,9 +54,32 @@ local function AdaptiveRating()
 		end
 		-- Rulesets
 		for rulesetName, rulesetData in pairs(data.Rulesets or {}) do
-			RS.Rulesets[rulesetName] = rulesetData
+			ruleset = {}
+			ruleset["BannedAbilities"] = rulesetData.BannedAbilities or {}
+			ruleset["BannedAbilityExceptions"] = rulesetData.BannedAbilityExceptions or {}
+			ruleset["Changes"] = rulesetData.Changes or {}
+			ruleset["BannedMoves"] = {}
+			for idC, bannedMove in pairs(rulesetData["BannedMoves"] or {}) do
+				if type(bannedMove) == "string" then
+					for idM, move in pairs(self.MoveCategory[bannedMove] or {}) do 
+						ruleset["BannedMoves"][move] = true
+					end
+				else
+					ruleset["BannedMoves"][bannedMove] = true
+				end
+			end
+			for id, bannedMoveException in pairs(rulesetData["BannedMoveException"] or {}) do
+				for id, RsMoveName in ipairs(ruleset["BannedMoves"] or {}) do 
+					if bannedMoveException == RsMoveName then 
+						ruleset["BannedMoves"][RsMoveName] = false
+					end
+				end
+			end
+			RS.Rulesets[rulesetName] = ruleset
 		end
 		self.RS = RS
+		local usedRuleset = GachaMonData.rulesetKey or "Standard"
+		self.changeRuleset(RS.Rulesets[usedRuleset], usedRuleset)
 
 		self.oldRef1 = GachaMonData.calculateRatingScore
 		GachaMonData.calculateRatingScore = self.calculateRatingScore
@@ -65,37 +89,42 @@ local function AdaptiveRating()
 		GachaMonData.calculateRatingScore = self.oldRef1
 	end
 
+	function self.changeRuleset(ruleset, key)
+		Utils.printDebug("changing Ruleset to " .. key)
+		local usedRuleset = {
+			Key = key,
+			Abilities = self.RS.Abilities,
+			FixedRatingMove = self.RS.FixedRatingMove,
+			Stats = self.RS.Stats,
+			ModifierAndRatings = self.RS.ModifierAndRatings,
+			BannedAbilities = ruleset.BannedAbilities,
+			BannedAbilityExceptions = ruleset.BannedAbilityExceptions,
+			BannedMoves = ruleset.BannedMoves,
+		}
+		print(usedRuleset.BannedMoves)
+		self.changeValues(usedRuleset, ruleset.Changes or {})
+		self.usedRuleset = usedRuleset
+	end
+
+	function self.changeValues(standard, change) 
+		for key, value in pairs(change or {}) do
+			if type(value) == "table" then
+				self.changeValues(standard[key], value)
+			else
+				standard[key] = change[key]
+			end
+		end
+	end
+
 	function self.calculateRatingScore(gachamon, baseStats)
 		Utils.printDebug("---------------------start------------------------")
 
-		local RS = self.RS
-		local RulesetChanges = RS.Rulesets[GachaMonData.rulesetKey or false] or RS.Rulesets["Standard"]
-		local BannedMoves = {}
-		for _, id in ipairs(RulesetChanges.BannedMoves or {}) do
-			if type(id) == "number" then
-				BannedMoves[id] = true
-			elseif id == "HM" then
-				for _, id in ipairs(self.HM or {}) do
-					BannedMoves[id] = true
-				end
-			elseif id == "HealMove" then
-				for _, id in ipairs(self.HealMove or {}) do
-					BannedMoves[id] = true
-				end
-			elseif id == "StatusHealMove" then
-				for _, id in ipairs(self.StatusHealMove or {}) do
-					BannedMoves[id] = true
-				end
-			else
-				Utils.printDebug("Banned Move not found: " .. id)
-			end
+		local RS = self.usedRuleset
+
+		local usedRulesetKey = GachaMonData.rulesetKey or "Standard"
+		if usedRulesetKey ~= self.usedRuleset.Key then
+			self.changeRuleset(self.RS.Rulesets[usedRulesetKey], usedRulesetKey)
 		end
-		for _, moveId in ipairs(RulesetChanges.BannedMoveException or {}) do
-			for i, RsMoveId in ipairs(BannedMoves or {}) do 
-				if moveId == RsMoveId then BannedMoves[id] = false end
-			end
-		end
-		RulesetChanges.BannedMoves = BannedMoves
 
 		local pokemonInternal = PokemonData.getNatDexCompatible(gachamon.PokemonId)
 		local pokemonTypes = pokemonInternal.types or {}
@@ -105,28 +134,28 @@ local function AdaptiveRating()
 		local specialPowerRating = RS.ModifierAndRatings.ModifierPower
 
 		local conditions = {
-			shedCoverage = 1, 
-			noSleepMove = 2, 
-			paraMove = 3, 
+			hasShedCoverage = 1, 
+			hasSleepMove = 2, 
+			hasParaMove = 3, 
 			hasPhysicalMove = 4, 
 			hasSpecialMove = 5, 
 			hasFullyAccurateDamagingMove = 6, 
 			hasRest = 7
 		}
 		local conditionsAchieved = {
-			[conditions.shedCoverage] = false,
-			[conditions.noSleepMove] = true,
-			[conditions.paraMove] = false,
+			[conditions.hasShedCoverage] = false,
+			[conditions.hasSleepMove] = false,
+			[conditions.hasParaMove] = false,
 			[conditions.hasPhysicalMove] = false,
 			[conditions.hasSpecialMove] = false,
 			[conditions.hasFullyAccurateDamagingMove] = false,
 			[conditions.hasRest] = false,
 		}
 		local resultingModifier = {
-			[conditions.noSleepMove] = RS.ModifierAndRatings.ModifierUselessFeature or 0,
+			[conditions.hasSleepMove] = RS.ModifierAndRatings.ModifierUselessFeature or 0,
 		}
 		local resultingRating = {
-			[conditions.paraMove] = RS.ModifierAndRatings.RatingSmallBonus or 0,
+			[conditions.hasParaMove] = RS.ModifierAndRatings.RatingSmallBonus or 0,
 		}
 
 
@@ -137,18 +166,20 @@ local function AdaptiveRating()
 		local physcialMovesBanned = false
 
 		-- Remove rating if banned ability, unless it qualifies for an exception
-		if RulesetChanges.BannedAbilities[ownAbility or 0] then
+		if RS.BannedAbilities[ownAbility or 0] then
 			local bannedAbilityException = false
-			for _, bae in pairs(RulesetChanges.BannedAbilityExceptions or {}) do
+			for _, bae in pairs(RS.BannedAbilityExceptions or {}) do
 				local bstOkay = pokemonInternal.bst < (bae.BSTLessThan or 0)
 				local evoOkay = not bae.MustEvo or pokemonInternal.evolution ~= PokemonData.Evolutions.NONE
-				local natdexOkay = CustomCode.RomHacks.isPlayingNatDex() and bae.NatDexOnly
+				local natdexOkay = not CustomCode.RomHacks.isPlayingNatDex() or bae.NatDexOnly
+				print(bstOkay and evoOkay and natdexOkay)
 				if bstOkay and evoOkay and natdexOkay then
 					bannedAbilityException = true
 					break
 				end
 			end
 			if not bannedAbilityException then
+				print("noException")
 				abilityRating = 0
 				if ownAbility == (AbilityData.Values.HugePowerId or 37) or ownAbility == (AbilityData.Values.PurePowerId or 74) then
 					physcialMovesBanned = true
@@ -167,7 +198,7 @@ local function AdaptiveRating()
 			else
 				abilityRating = abilityRating + (RS.ModifierAndRatings.RatingAbilitySandStreamUnsafe or 0)
 			end
-			conditionsAchieved[conditions.shedCoverage] = true
+			conditionsAchieved[conditions.hasShedCoverage] = true
 		end
 		Utils.printDebug("Fixed Score for our Ability: " .. abilityRating)
 		ratingTotal = ratingTotal + abilityRating
@@ -326,8 +357,8 @@ local function AdaptiveRating()
 			Utils.printDebug("physical defense needed: " .. physicalDefenseNeeded)
 			Utils.printDebug("special defense needed: " .. specialDefenseNeeded)
 			local totalDefenseNeeded = physicalDefenseNeeded + specialDefenseNeeded
-			local spdPercentage = specialDefenseNeeded / totalDefenseNeeded
-			local defPercentage = physicalDefenseNeeded / totalDefenseNeeded
+			local spdPercentage = math.min(math.max(specialDefenseNeeded / totalDefenseNeeded, 0.34), 0.66)
+			local defPercentage = 1 - spdPercentage
 
 			-- compare with a flat-ish spread mon
 			local compStatsTotal = RS.Stats.Defense.Method.DefenseWanted or 0
@@ -403,14 +434,14 @@ local function AdaptiveRating()
 				rating = 0
 			}
 			Utils.printDebug(MoveData.Moves[id].name)
-			if RulesetChanges.BannedMoves[id or 0] then -- Remove rating if banned move
+			if RS.BannedMoves[id or 0] then -- Remove rating if banned move
 				Utils.printDebug("banned move")
 				iMoves[i].rating = 0
 				if
 					PokemonData.Types.FLYING == iMoves[i].move.type or PokemonData.Types.ROCK == iMoves[i].move.type or
 						PokemonData.Types.GHOST == iMoves[i].move.type
 				 then
-					conditionsAchieved[conditions.shedCoverage] = true
+					conditionsAchieved[conditions.hasShedCoverage] = true
 				end
 			elseif RS.FixedRatingMove[id] then -- Moves with fixed rating
 				iMoves[i].rating = RS.FixedRatingMove[id]
@@ -418,7 +449,7 @@ local function AdaptiveRating()
 				--Utils.printDebug(iMoves[i].rating)
 				-- currently all weather moves have fixed rating
 				if id == MoveData.Values.Sandstorm or id == MoveData.Values.Hail then
-					conditionsAchieved[conditions.shedCoverage] = true
+					conditionsAchieved[conditions.hasShedCoverage] = true
 				end
 			elseif physcialMovesBanned and iMoves[i].move.category == MoveData.Categories.PHYSICAL and iMoves[i].ePower > 0 then
 				--Utils.printDebug("No Rating due to Huge/Pure Power")
@@ -427,7 +458,7 @@ local function AdaptiveRating()
 						PokemonData.Types.GHOST == iMoves[i].move.type
 				 then
 					-- can still use physical moves with huge power for shed coverage
-					conditionsAchieved[conditions.shedCoverage] = true
+					conditionsAchieved[conditions.hasShedCoverage] = true
 				end
 			else
 				if IsOHKOMove[id] then
@@ -441,7 +472,7 @@ local function AdaptiveRating()
 				else
 					local setupAdjustment = 1
 					if iMoves[i].move.category == MoveData.Categories.STATUS then
-						setupAdjustment = RulesetChanges.AdjustedMoves.Setup or 1
+						setupAdjustment = RS.ModifierAndRatings.ModifierMove.Setup or 1
 						iMoves[i].ppRating = RS.ModifierAndRatings.ModifierPPStatus[iMoves[i].move.pp] or 0
 						-- status move
 					elseif iMoves[i].ePower > 0 then
@@ -484,11 +515,11 @@ local function AdaptiveRating()
 									PokemonData.Types.FIRE == iMoves[i].move.type or
 									PokemonData.Types.DARK == iMoves[i].move.type
 							 then
-								conditionsAchieved[conditions.shedCoverage] = true
+								conditionsAchieved[conditions.hasShedCoverage] = true
 							end
 						else
 							-- currently no type rating for "typeless"
-							conditionsAchieved[conditions.shedCoverage] = true
+							conditionsAchieved[conditions.hasShedCoverage] = true
 						end
 						if IsHighCritMove[id] then -- High Crit Chance
 							iMoves[i].powerRating = iMoves[i].powerRating * (RS.ModifierAndRatings.ModifierHighCrit or 1)
@@ -526,7 +557,7 @@ local function AdaptiveRating()
 
 						if MoveData.Moves[id].iscontact then -- contact
 							local contactModifier = RS.ModifierAndRatings.ModifierContact or 1
-							if self.DoubleHitMoves[id] or self.MultiHitMoves[id]  then
+							if self.MoveCategory.DoubleHitMoves[id] or self.MoveCategory.MultiHitMoves[id]  then
 								contactModifier = contactModifier * contactModifier
 							end
 							iMoves[i].powerRating = iMoves[i].powerRating * contactModifier
@@ -550,10 +581,10 @@ local function AdaptiveRating()
 						Utils.printDebug("status Rating: " .. status)
 						local statusRating = RS.ModifierAndRatings.RatingOnHitEffect[status] or 0
 						if status == Status.SLEEP then
-							conditionsAchieved[conditions.noSleepMove] = false
+							conditionsAchieved[conditions.hasSleepMove] = true
 						end
 						if status == Status.PARALYSIS then
-							conditionsAchieved[conditions.paraMove] = true
+							conditionsAchieved[conditions.hasParaMove] = true
 						end
 						if (status == Status.POISON
 								or status == Status.TOXIC
@@ -561,7 +592,7 @@ local function AdaptiveRating()
 								or status == Status.CONFUSION)
 							and iMoves[i].move.category == MoveData.Categories.STATUS
 						 then
-							conditionsAchieved[conditions.shedCoverage] = true
+							conditionsAchieved[conditions.hasShedCoverage] = true
 						end
 						iMoves[i].effectRating = iMoves[i].effectRating + statusRating * math.min(chance * (ownAbility == AbilityData.Values.SereneGraceId and 2 or 1), 1)
 						Utils.printDebug("new effect rating: " .. iMoves[i].effectRating)
@@ -673,7 +704,7 @@ local function AdaptiveRating()
 				end
 				-- makes mon skip turn afterwards (like Hyper Beam) or the mon has no truant (we handle truant separately)
 				if SkipsTurnAfterwards[id] and ownAbility ~= AbilityData.Values.TruantId then
-					iMoves[i].powerRating = iMoves[i].powerRating * (RS.ModifierAndRatings.ModifierSkipTurnAfterwards or 1)
+					iMoves[i].rating = iMoves[i].rating * (RS.ModifierAndRatings.ModifierSkipTurnAfterwards or 1)
 					Utils.printDebug("skips turn: " .. iMoves[i].rating)
 				end
 				-- for moves that hit after 3 turns (yawn, future sight, doom desire)
@@ -693,14 +724,14 @@ local function AdaptiveRating()
 					Utils.printDebug("self confusion and no own tempo: " .. iMoves[i].rating)
 				end
 				-- moves with specific (json input) rating modifiers
-				if RS.ModifierAndRatings.ModifierMove[id] then
-					iMoves[i].rating = iMoves[i].rating * (RS.ModifierAndRatings.ModifierMove[id] or 1)
+				if RS.ModifierAndRatings.ModifierMove[tostring(id)] then
+					iMoves[i].rating = iMoves[i].rating * (RS.ModifierAndRatings.ModifierMove[tostring(id)] or 1)
 				end
 
 				-- set flags for other moves / stats
 
 				if RequiresOpponentAsleep[id] then
-					iMoves[i].conditionsToCheck[conditions.noSleepMove] = true
+					iMoves[i].conditionsToCheck[conditions.hasSleepMove] = true
 					Utils.printDebug("requires sleep move: " .. iMoves[i].rating)
 				end
 				if RequiresSelfSleep[id] then
@@ -708,7 +739,7 @@ local function AdaptiveRating()
 					Utils.printDebug("requires Rest: " .. iMoves[i].rating)
 				end
 				if BonusIfEnemyParalyzed[id] then
-					iMoves[i].conditionsToCheck[conditions.paraMove] = true
+					iMoves[i].conditionsToCheck[conditions.hasParaMove] = true
 					Utils.printDebug("requires para move: " .. iMoves[i].rating)
 				end
 			end
@@ -729,7 +760,6 @@ local function AdaptiveRating()
 					iMoves[i].rating = iMoves[i].rating * (resultingModifier[condition] or 1)
 				end
 			end
-			iMoves[i].rating = iMoves[i].rating * (RulesetChanges.AdjustedMoves[id] or 1)
 			Utils.printDebug("final move rating: " .. iMoves[i].rating or 0)
 
 			if debug then
@@ -757,7 +787,7 @@ local function AdaptiveRating()
 		ratingTotal = ratingTotal + offenseRating
 		Utils.printDebug("offense rating: " .. offenseRating)
 
-		if conditionsAchieved[conditions.shedCoverage] then
+		if conditionsAchieved[conditions.hasShedCoverage] then
 			ratingTotal = ratingTotal + RS.ModifierAndRatings.RatingShedCoverage or 0
 			Utils.printDebug("shed coverage: " .. RS.ModifierAndRatings.RatingShedCoverage or 0)
 		end
@@ -1210,9 +1240,9 @@ function self.getExpectedPowerForRating(moveId)
 	end
 
 	local power = tonumber(MoveData.Moves[moveId].power) or 0
-	if self.DoubleHitMoves[moveId] then
+	if self.MoveCategory.DoubleHitMoves[moveId] then
 		return (power * 2)
-	elseif self.MultiHitMoves[moveId] then
+	elseif self.MoveCategory.MultiHitMoves[moveId] then
 		-- Average of 3 hits
 		return (power * 3)
 	end
@@ -1220,16 +1250,18 @@ function self.getExpectedPowerForRating(moveId)
 	return power
 end
 
+self.MoveCategory = {
+
 -- https://bulbapedia.bulbagarden.net/wiki/Multi-strike_move#Variable_number_of_strikes
-self.MultiHitMoves = {
+["MultiHitMoves"] = {
 	[292] = true, [140] = true, [198] = true, [331] = true, [4] = true, [3] = true,
 	[31] = true, [154] = true, [333] = true, [42] = true, [350] = true, [131] = true
-}
+},
 -- https://bulbapedia.bulbagarden.net/wiki/Multi-strike_move#Fixed_number_of_multiple_strikes
-self.DoubleHitMoves = {
+["DoubleHitMoves"] = {
 	[155] = true, [41] = true, [24] = true
-}
-self.HealMove = {
+},
+["HealMove"] = {
 	105, -- recover
 	135, -- softboiled
 	156, -- rest
@@ -1242,21 +1274,21 @@ self.HealMove = {
 	273, -- wish
 	275, -- ingrain
 	303 -- slack off
-}
-self.StatusHealMove = {
+},
+["StatusHealMove"] = {
 	215, -- heal bell
 	287, -- refresh
 	312 -- aromatherapy
-}
-self.DrainMove = {
+},
+["DrainMove"] = {
 	71, -- absorb
 	72, -- mega drain
 	138, -- dream eater
 	141, -- leech life
 	202, -- giga drain
 	356 -- <fairy drain move>
-}
-self.HM = {
+},
+["HM"] = {
 	15, 	-- cut 
 	19, 	-- fly
 	57, 	-- surf
@@ -1265,6 +1297,7 @@ self.HM = {
 	148, 	-- flash
 	249, 	-- rock smash
 	291 	-- dive
+}
 }
 self.SporeId = 147
 self.LeechSeedId = 73

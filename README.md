@@ -62,3 +62,4 @@ Add up ratings (sometimes done before already, sometimes several ratings influen
 - interaction between different "rating groups" (like offense <-> move) not modular enough
 - truant by itself currently gives 0 rating, but makes all moves treated like having a cooldown turn after
 - Weatherball not implemented yet
+- lightscreen / reflect are being rated similar to +2 stages
