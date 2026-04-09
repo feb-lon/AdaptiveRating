@@ -10,7 +10,7 @@ This is my Attempt at creating a Gachamon Rating System that where I tried to:
 ## Rough outline how the score is being calculated:
 
 - There are conditions a mon can fulfill. The variables are created at the beginning and are evaluated later. Examples are shed coverage, or availability of a fully accurate move.
-- Instead of giving points for reaching thresholds (e.g. for stats) I tried to "make every point count". (e.g. often used tanh variations for stats)
+- Instead of giving points for reaching thresholds (e.g. for stats) I tried to "make every point count". (e.g. for stats, tanh variations are often used to achieve this)
 
 ### Abilites 
 Rated similarily to the original with flat rating for most of them, as they often have little influence on other factors included in calculations here.
