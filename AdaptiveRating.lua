@@ -1,7 +1,7 @@
 local function AdaptiveRating()
 	-- Define descriptive attributes of the custom extension that are displayed on the Tracker settings
 	local self = {}
-	self.version = "0.1"
+	self.version = "0.2"
 	self.name = "AdaptiveRating"
 	self.author = "Feblon"
 	self.description = "Alternative to the default gachamon rating calculation."
