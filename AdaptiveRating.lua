@@ -83,10 +83,58 @@ local function AdaptiveRating()
 
 		self.oldRef1 = GachaMonData.calculateRatingScore
 		GachaMonData.calculateRatingScore = self.calculateRatingScore
+		self.oldRef2 = GachaMonData.updateMainScreenViewedGachaMon
+		GachaMonData.updateMainScreenViewedGachaMon = self.updateMainScreenViewedGachaMon
 	end
 
 	function self.unload()
 		GachaMonData.calculateRatingScore = self.oldRef1
+		GachaMonData.updateMainScreenViewedGachaMon = self.oldRef2
+	end
+
+	function self.updateMainScreenViewedGachaMon(needsRecalculating)
+		needsRecalculating = needsRecalculating or false
+
+		if not GachaMonData.isCompatibleWithEmulator() then
+			return
+		end
+
+		local viewedPokemon = Battle.getViewedPokemon(true)
+		if not viewedPokemon then
+			GachaMonData.playerViewedMon = nil
+			GachaMonData.playerViewedInitialStars = 0
+			return
+		end
+
+		local prevGachamon = GachaMonData.playerViewedMon or {}
+		-- Check if gachamon is new or different mon
+		if not needsRecalculating then
+			needsRecalculating = (prevGachamon.PokemonId ~= viewedPokemon.pokemonID) or (prevGachamon.Level ~= viewedPokemon.level)
+		end
+
+		-- Check if it learned any new moves
+		if not needsRecalculating then
+			local prevMoveIds = prevGachamon:getMoveIds() or {}
+			local currentMoves = viewedPokemon.moves or {}
+			for i = 1, 4, 1 do
+				if currentMoves[i] and currentMoves[i].id ~= prevMoveIds[i] then
+					needsRecalculating = true
+					break
+				end
+			end
+		end
+
+		if not needsRecalculating then
+			return
+		end
+
+		local viewedGachamon = GachaMonData.convertPokemonToGachaMon(viewedPokemon)
+		local recentGachamon = GachaMonData.getAssociatedRecentMon(viewedGachamon)
+		if recentGachamon then
+			-- Always reset the initial stars to original card; do this every time the mon gets rerolled (in case the mon changes)
+			GachaMonData.playerViewedMon = viewedGachamon
+			GachaMonData.playerViewedInitialStars = recentGachamon:getStars() or 0
+		end
 	end
 
 	function self.changeRuleset(ruleset, key)
@@ -101,7 +149,6 @@ local function AdaptiveRating()
 			BannedAbilityExceptions = ruleset.BannedAbilityExceptions,
 			BannedMoves = ruleset.BannedMoves,
 		}
-		print(usedRuleset.BannedMoves)
 		self.changeValues(usedRuleset, ruleset.Changes or {})
 		self.usedRuleset = usedRuleset
 	end
@@ -172,14 +219,12 @@ local function AdaptiveRating()
 				local bstOkay = pokemonInternal.bst < (bae.BSTLessThan or 0)
 				local evoOkay = not bae.MustEvo or pokemonInternal.evolution ~= PokemonData.Evolutions.NONE
 				local natdexOkay = not CustomCode.RomHacks.isPlayingNatDex() or bae.NatDexOnly
-				print(bstOkay and evoOkay and natdexOkay)
 				if bstOkay and evoOkay and natdexOkay then
 					bannedAbilityException = true
 					break
 				end
 			end
 			if not bannedAbilityException then
-				print("noException")
 				abilityRating = 0
 				if ownAbility == (AbilityData.Values.HugePowerId or 37) or ownAbility == (AbilityData.Values.PurePowerId or 74) then
 					physcialMovesBanned = true
@@ -414,7 +459,12 @@ local function AdaptiveRating()
 
 		local moves = gachamon.Temp.MoveIds or {}
 		if debug then
-			moves = range(1, 354)
+			moves = {}
+			for i=1, 354 do 
+				moves[i] = i
+			end
+			pokemonTypes = {}
+			ownAbility = 0
 			file = io.open("ratings.txt", "w")
 		end
 
@@ -842,465 +892,465 @@ local function AdaptiveRating()
 		[AbilityData.Values.DroughtId or 70] = { [PokemonData.Types.FIRE] = 1.5, [PokemonData.Types.WATER] = 0.5 },
 	}
 
-Status = {
-	BURN = "burn",
-	FREEZE = "freeze",
-	PARALYSIS = "paralysis",
-	SLEEP = "sleep",
-	POISON = "poison",
-	TOXIC = "toxic",
-	INFATUATION = "infatuation",
-	CONFUSION = "confusion",
-	FLINCH = "flinch",
-}
+	Status = {
+		BURN = "burn",
+		FREEZE = "freeze",
+		PARALYSIS = "paralysis",
+		SLEEP = "sleep",
+		POISON = "poison",
+		TOXIC = "toxic",
+		INFATUATION = "infatuation",
+		CONFUSION = "confusion",
+		FLINCH = "flinch",
+	}
 
-Stats = {
-	ATK = "Attack",
-	DEF = "Defense",
-	SPA = "Special Attack",
-	SPD = "Special Defense",
-	SPE = "Speed",
-	ACC = "Accuracy",
-	EVA = "Evasion",
-	CRT = "Critical Hit Chance",
-}
+	Stats = {
+		ATK = "Attack",
+		DEF = "Defense",
+		SPA = "Special Attack",
+		SPD = "Special Defense",
+		SPE = "Speed",
+		ACC = "Accuracy",
+		EVA = "Evasion",
+		CRT = "Critical Hit Chance",
+	}
 
-StatusInflicted = {
-	[7] = { [Status.BURN] = 0.1, }, -- Fire Punch
-	[8] = { [Status.FREEZE] = 0.1, }, -- Ice Punch
-	[9] = { [Status.PARALYSIS] = 0.1, }, -- Thunder Punch
-	[23] = { [Status.FLINCH] = 0.3, }, -- Stomp
-	[27] = { [Status.FLINCH] = 0.3, }, -- Rolling Kick
-	[29] = { [Status.FLINCH] = 0.3, }, -- Headbutt
-	[34] = { [Status.PARALYSIS] = 0.3, }, -- Body Slam
-	[40] = { [Status.POISON] = 0.3, }, -- Poison Sting
-	[41] = { [Status.POISON] = 0.2, }, -- Twineedle
-	[44] = { [Status.FLINCH] = 0.2, }, -- Bite
-	[47] = { [Status.SLEEP] = 1, }, -- Sing
-	[48] = { [Status.CONFUSION] = 1, }, -- Supersonic
-	[52] = { [Status.BURN] = 0.1, }, -- Ember
-	[53] = { [Status.BURN] = 0.1, }, -- Flamethrower
-	[58] = { [Status.FREEZE] = 0.1, }, -- Ice Beam
-	[59] = { [Status.FREEZE] = 0.1, }, -- Blizzard
-	[60] = { [Status.CONFUSION] = 0.1, }, -- Psybeam
-	[77] = { [Status.POISON] = 1, }, -- Poison Powder
-	[78] = { [Status.PARALYSIS] = 1, }, -- Stun Spore
-	[79] = { [Status.SLEEP] = 1, }, -- Sleep Powder
-	[84] = { [Status.PARALYSIS] = 0.1, }, -- Thunder Shock
-	[85] = { [Status.PARALYSIS] = 0.1, }, -- Thunderbolt
-	[86] = { [Status.PARALYSIS] = 1, }, -- Thunderwave
-	[87] = { [Status.PARALYSIS] = 0.3, }, -- Thunder
-	[92] = { [Status.TOXIC] = 1, }, -- Toxic
-	[93] = { [Status.CONFUSION] = 0.1, }, -- Confusion
-	[95] = { [Status.SLEEP] = 1, }, -- Hypnosis
-	[109] = { [Status.CONFUSION] = 1, }, -- Confuse Ray
-	[122] = { [Status.PARALYSIS] = 0.3, }, -- Lick
-	[123] = { [Status.POISON] = 0.4, }, -- Smog
-	[124] = { [Status.POISON] = 0.3, }, -- Sludge
-	[125] = { [Status.FLINCH] = 0.1, }, -- Bone Club
-	[126] = { [Status.BURN] = 0.1, }, -- Fire Blast
-	[137] = { [Status.PARALYSIS] = 1, }, -- Glare
-	[139] = { [Status.POISON] = 1, }, -- Poison Gas
-	[142] = { [Status.SLEEP] = 1, }, -- Lovely Kiss
-	[143] = { [Status.FLINCH] = 0.3, }, -- Sky Attack
-	[146] = { [Status.CONFUSION] = 0.2, }, -- Dizzy Punch
-	[147] = { [Status.SLEEP] = 1, }, -- Spore
-	[157] = { [Status.FLINCH] = 0.3, }, -- Rock Slide
-	[158] = { [Status.FLINCH] = 0.1, }, -- Hyper Fang
-	[161] = { [Status.PARALYSIS] = 1/15, [Status.BURN] = 1/15, [Status.FREEZE] = 1/15, }, -- Tri Attack
-	[172] = { [Status.BURN] = 0.1, }, -- FFlame Wheel
-	[173] = { [Status.FLINCH] = 0.3, }, -- Snore
-	[181] = { [Status.FREEZE] = 0.1, }, -- Powder Snow
-	[186] = { [Status.CONFUSION] = 1, }, -- Sweet Kiss
-	[188] = { [Status.POISON] = 0.3, }, -- Sludge Bomb
-	[191] = { [Status.PARALYSIS] = 1, }, -- Zap Cannon
-	[207] = { [Status.CONFUSION] = 1, }, -- Swagger
-	[209] = { [Status.PARALYSIS] = 0.3, }, -- Spark
-	[213] = { [Status.INFATUATION] = 1, }, -- Attract
-	[221] = { [Status.BURN] = 0.5, }, -- Sacred Fire
-	[223] = { [Status.CONFUSION] = 1, }, -- Dynamic Punch
-	[225] = { [Status.PARALYSIS] = 0.3, }, -- Dragon Breath
-	[239] = { [Status.FLINCH] = 0.2, }, -- Twister
-	[252] = { [Status.FLINCH] = 1, }, -- Fake Out
-	[257] = { [Status.BURN] = 0.1, }, -- Heat Wave
-	[260] = { [Status.CONFUSION] = 1, }, -- Flatter
-	[261] = { [Status.BURN] = 1, }, -- Will-O-Wisp
-	[281] = { [Status.SLEEP] = 1, }, -- Yawn
-	[290] = { [Status.PARALYSIS] = 0.3, }, -- Secret Power, technically other status as well but for simplicity only para here
-	[298] = { [Status.CONFUSION] = 1, }, -- Teeter Dance
-	[299] = { [Status.BURN] = 0.1, }, -- Blaze Kick
-	[302] = { [Status.FLINCH] = 0.3, }, -- Needle Arm
-	[305] = { [Status.TOXIC] = 0.3, }, -- Poison Fang
-	[310] = { [Status.FLINCH] = 0.3, }, -- Astonish
-	[320] = { [Status.SLEEP] = 1, }, -- Grass Whistle
-	[324] = { [Status.CONFUSION] = 0.1, }, -- Signal Beam
-	[326] = { [Status.FLINCH] = 0.1, }, -- Extrasensory
-	[340] = { [Status.PARALYSIS] = 0.3, }, -- Bounce
-	[342] = { [Status.POISON] = 0.1, }, -- Poison Tail
-	[352] = { [Status.CONFUSION] = 0.2, }, -- Signal Beam
-}
+	StatusInflicted = {
+		[7] = { [Status.BURN] = 0.1, }, -- Fire Punch
+		[8] = { [Status.FREEZE] = 0.1, }, -- Ice Punch
+		[9] = { [Status.PARALYSIS] = 0.1, }, -- Thunder Punch
+		[23] = { [Status.FLINCH] = 0.3, }, -- Stomp
+		[27] = { [Status.FLINCH] = 0.3, }, -- Rolling Kick
+		[29] = { [Status.FLINCH] = 0.3, }, -- Headbutt
+		[34] = { [Status.PARALYSIS] = 0.3, }, -- Body Slam
+		[40] = { [Status.POISON] = 0.3, }, -- Poison Sting
+		[41] = { [Status.POISON] = 0.2, }, -- Twineedle
+		[44] = { [Status.FLINCH] = 0.2, }, -- Bite
+		[47] = { [Status.SLEEP] = 1, }, -- Sing
+		[48] = { [Status.CONFUSION] = 1, }, -- Supersonic
+		[52] = { [Status.BURN] = 0.1, }, -- Ember
+		[53] = { [Status.BURN] = 0.1, }, -- Flamethrower
+		[58] = { [Status.FREEZE] = 0.1, }, -- Ice Beam
+		[59] = { [Status.FREEZE] = 0.1, }, -- Blizzard
+		[60] = { [Status.CONFUSION] = 0.1, }, -- Psybeam
+		[77] = { [Status.POISON] = 1, }, -- Poison Powder
+		[78] = { [Status.PARALYSIS] = 1, }, -- Stun Spore
+		[79] = { [Status.SLEEP] = 1, }, -- Sleep Powder
+		[84] = { [Status.PARALYSIS] = 0.1, }, -- Thunder Shock
+		[85] = { [Status.PARALYSIS] = 0.1, }, -- Thunderbolt
+		[86] = { [Status.PARALYSIS] = 1, }, -- Thunderwave
+		[87] = { [Status.PARALYSIS] = 0.3, }, -- Thunder
+		[92] = { [Status.TOXIC] = 1, }, -- Toxic
+		[93] = { [Status.CONFUSION] = 0.1, }, -- Confusion
+		[95] = { [Status.SLEEP] = 1, }, -- Hypnosis
+		[109] = { [Status.CONFUSION] = 1, }, -- Confuse Ray
+		[122] = { [Status.PARALYSIS] = 0.3, }, -- Lick
+		[123] = { [Status.POISON] = 0.4, }, -- Smog
+		[124] = { [Status.POISON] = 0.3, }, -- Sludge
+		[125] = { [Status.FLINCH] = 0.1, }, -- Bone Club
+		[126] = { [Status.BURN] = 0.1, }, -- Fire Blast
+		[137] = { [Status.PARALYSIS] = 1, }, -- Glare
+		[139] = { [Status.POISON] = 1, }, -- Poison Gas
+		[142] = { [Status.SLEEP] = 1, }, -- Lovely Kiss
+		[143] = { [Status.FLINCH] = 0.3, }, -- Sky Attack
+		[146] = { [Status.CONFUSION] = 0.2, }, -- Dizzy Punch
+		[147] = { [Status.SLEEP] = 1, }, -- Spore
+		[157] = { [Status.FLINCH] = 0.3, }, -- Rock Slide
+		[158] = { [Status.FLINCH] = 0.1, }, -- Hyper Fang
+		[161] = { [Status.PARALYSIS] = 1/15, [Status.BURN] = 1/15, [Status.FREEZE] = 1/15, }, -- Tri Attack
+		[172] = { [Status.BURN] = 0.1, }, -- FFlame Wheel
+		[173] = { [Status.FLINCH] = 0.3, }, -- Snore
+		[181] = { [Status.FREEZE] = 0.1, }, -- Powder Snow
+		[186] = { [Status.CONFUSION] = 1, }, -- Sweet Kiss
+		[188] = { [Status.POISON] = 0.3, }, -- Sludge Bomb
+		[191] = { [Status.PARALYSIS] = 1, }, -- Zap Cannon
+		[207] = { [Status.CONFUSION] = 1, }, -- Swagger
+		[209] = { [Status.PARALYSIS] = 0.3, }, -- Spark
+		[213] = { [Status.INFATUATION] = 1, }, -- Attract
+		[221] = { [Status.BURN] = 0.5, }, -- Sacred Fire
+		[223] = { [Status.CONFUSION] = 1, }, -- Dynamic Punch
+		[225] = { [Status.PARALYSIS] = 0.3, }, -- Dragon Breath
+		[239] = { [Status.FLINCH] = 0.2, }, -- Twister
+		[252] = { [Status.FLINCH] = 1, }, -- Fake Out
+		[257] = { [Status.BURN] = 0.1, }, -- Heat Wave
+		[260] = { [Status.CONFUSION] = 1, }, -- Flatter
+		[261] = { [Status.BURN] = 1, }, -- Will-O-Wisp
+		[281] = { [Status.SLEEP] = 1, }, -- Yawn
+		[290] = { [Status.PARALYSIS] = 0.3, }, -- Secret Power, technically other status as well but for simplicity only para here
+		[298] = { [Status.CONFUSION] = 1, }, -- Teeter Dance
+		[299] = { [Status.BURN] = 0.1, }, -- Blaze Kick
+		[302] = { [Status.FLINCH] = 0.3, }, -- Needle Arm
+		[305] = { [Status.TOXIC] = 0.3, }, -- Poison Fang
+		[310] = { [Status.FLINCH] = 0.3, }, -- Astonish
+		[320] = { [Status.SLEEP] = 1, }, -- Grass Whistle
+		[324] = { [Status.CONFUSION] = 0.1, }, -- Signal Beam
+		[326] = { [Status.FLINCH] = 0.1, }, -- Extrasensory
+		[340] = { [Status.PARALYSIS] = 0.3, }, -- Bounce
+		[342] = { [Status.POISON] = 0.1, }, -- Poison Tail
+		[352] = { [Status.CONFUSION] = 0.2, }, -- Signal Beam
+	}
 
-ModifiesEnemyStat = {
-	[28] = {stats = {Stats.ACC}, modifier = -1, chance = 1}, -- Sand Attack
-	[39] = {stats = {Stats.DEF}, modifier = -1, chance = 1}, -- Tail Whip
-	[43] = {stats = {Stats.DEF}, modifier = -1, chance = 1}, -- Leer
-	[45] = {stats = {Stats.ATK}, modifier = -1, chance = 1}, -- Growl
-	[51] = {stats = {Stats.DEF}, modifier = -1, chance = 0.1}, -- Acid
-	[61] = {stats = {Stats.SPE}, modifier = -1, chance = 0.1}, -- Bubble Beam
-	[62] = {stats = {Stats.ATK}, modifier = -1, chance = 0.1}, -- Aurora Beam
-	[81] = {stats = {Stats.SPE}, modifier = -1, chance = 1}, -- String Shot
-	[94] = {stats = {Stats.SPD}, modifier = -1, chance = 0.1}, -- Psychic
-	[103] = {stats = {Stats.DEF}, modifier = -2, chance = 1}, -- Screech
-	[108] = {stats = {Stats.ACC}, modifier = -1, chance = 1}, -- Smokescreen
-	[132] = {stats = {Stats.SPE}, modifier = -1, chance = 0.1}, -- Constrict
-	[134] = {stats = {Stats.ACC}, modifier = -1, chance = 1}, -- Kinesis
-	[145] = {stats = {Stats.SPE}, modifier = -1, chance = 0.1}, -- Bubble
-	[148] = {stats = {Stats.ACC}, modifier = -1, chance = 1}, -- Flash
-	[178] = {stats = {Stats.SPE}, modifier = -2, chance = 1}, -- Cotton Spore
-	[184] = {stats = {Stats.SPE}, modifier = -2, chance = 1}, -- Scary Face
-	[189] = {stats = {Stats.ACC}, modifier = -1, chance = 1}, -- Mud Slap
-	[190] = {stats = {Stats.ACC}, modifier = -1, chance = 0.5}, -- Octazooka
-	[196] = {stats = {Stats.SPE}, modifier = -1, chance = 1}, -- Icy Wind
-	[204] = {stats = {Stats.ATK}, modifier = -2, chance = 1}, -- Charm
-	[207] = {stats = {Stats.ATK}, modifier = 2, chance = 1}, -- Swagger
-	[230] = {stats = {Stats.EVA}, modifier = -1, chance = 1}, -- Sweet Scent
-	[231] = {stats = {Stats.DEF}, modifier = -1, chance = 0.3}, -- Iron Tail
-	[242] = {stats = {Stats.SPD}, modifier = -1, chance = 0.2}, -- Crunch
-	[247] = {stats = {Stats.SPD}, modifier = -1, chance = 0.2}, -- Shadow Ball
-	[249] = {stats = {Stats.DEF}, modifier = -1, chance = 0.5}, -- Rock Smash
-	[260] = {stats = {Stats.SPA}, modifier = 1, chance = 1}, -- Flatter
-	[295] = {stats = {Stats.SPD}, modifier = -1, chance = 0.5}, -- Luster Purge
-	[296] = {stats = {Stats.SPA}, modifier = -1, chance = 0.5}, -- Mist Ball
-	[297] = {stats = {Stats.ATK}, modifier = -2, chance = 1}, -- Feather Dance
-	[305] = {stats = {Stats.DEF}, modifier = -1, chance = 0.5}, -- Crush Claw
-	[313] = {stats = {Stats.SPA}, modifier = -2, chance = 1}, -- Fake Tears
-	[317] = {stats = {Stats.SPE}, modifier = -1, chance = 1}, -- Rock Tomb
-	[319] = {stats = {Stats.SPD}, modifier = -2, chance = 1}, -- Metal Sound
-	[321] = {stats = {Stats.ATK, Stats.DEF}, modifier = -1, chance = 1}, -- Tickle
-	[330] = {stats = {Stats.ACC}, modifier = -1, chance = 0.3}, -- Muddy Water
-	[341] = {stats = {Stats.SPE}, modifier = -1, chance = 1}, -- Mud Shot
-}
+	ModifiesEnemyStat = {
+		[28] = {stats = {Stats.ACC}, modifier = -1, chance = 1}, -- Sand Attack
+		[39] = {stats = {Stats.DEF}, modifier = -1, chance = 1}, -- Tail Whip
+		[43] = {stats = {Stats.DEF}, modifier = -1, chance = 1}, -- Leer
+		[45] = {stats = {Stats.ATK}, modifier = -1, chance = 1}, -- Growl
+		[51] = {stats = {Stats.DEF}, modifier = -1, chance = 0.1}, -- Acid
+		[61] = {stats = {Stats.SPE}, modifier = -1, chance = 0.1}, -- Bubble Beam
+		[62] = {stats = {Stats.ATK}, modifier = -1, chance = 0.1}, -- Aurora Beam
+		[81] = {stats = {Stats.SPE}, modifier = -1, chance = 1}, -- String Shot
+		[94] = {stats = {Stats.SPD}, modifier = -1, chance = 0.1}, -- Psychic
+		[103] = {stats = {Stats.DEF}, modifier = -2, chance = 1}, -- Screech
+		[108] = {stats = {Stats.ACC}, modifier = -1, chance = 1}, -- Smokescreen
+		[132] = {stats = {Stats.SPE}, modifier = -1, chance = 0.1}, -- Constrict
+		[134] = {stats = {Stats.ACC}, modifier = -1, chance = 1}, -- Kinesis
+		[145] = {stats = {Stats.SPE}, modifier = -1, chance = 0.1}, -- Bubble
+		[148] = {stats = {Stats.ACC}, modifier = -1, chance = 1}, -- Flash
+		[178] = {stats = {Stats.SPE}, modifier = -2, chance = 1}, -- Cotton Spore
+		[184] = {stats = {Stats.SPE}, modifier = -2, chance = 1}, -- Scary Face
+		[189] = {stats = {Stats.ACC}, modifier = -1, chance = 1}, -- Mud Slap
+		[190] = {stats = {Stats.ACC}, modifier = -1, chance = 0.5}, -- Octazooka
+		[196] = {stats = {Stats.SPE}, modifier = -1, chance = 1}, -- Icy Wind
+		[204] = {stats = {Stats.ATK}, modifier = -2, chance = 1}, -- Charm
+		[207] = {stats = {Stats.ATK}, modifier = 2, chance = 1}, -- Swagger
+		[230] = {stats = {Stats.EVA}, modifier = -1, chance = 1}, -- Sweet Scent
+		[231] = {stats = {Stats.DEF}, modifier = -1, chance = 0.3}, -- Iron Tail
+		[242] = {stats = {Stats.SPD}, modifier = -1, chance = 0.2}, -- Crunch
+		[247] = {stats = {Stats.SPD}, modifier = -1, chance = 0.2}, -- Shadow Ball
+		[249] = {stats = {Stats.DEF}, modifier = -1, chance = 0.5}, -- Rock Smash
+		[260] = {stats = {Stats.SPA}, modifier = 1, chance = 1}, -- Flatter
+		[295] = {stats = {Stats.SPD}, modifier = -1, chance = 0.5}, -- Luster Purge
+		[296] = {stats = {Stats.SPA}, modifier = -1, chance = 0.5}, -- Mist Ball
+		[297] = {stats = {Stats.ATK}, modifier = -2, chance = 1}, -- Feather Dance
+		[305] = {stats = {Stats.DEF}, modifier = -1, chance = 0.5}, -- Crush Claw
+		[313] = {stats = {Stats.SPA}, modifier = -2, chance = 1}, -- Fake Tears
+		[317] = {stats = {Stats.SPE}, modifier = -1, chance = 1}, -- Rock Tomb
+		[319] = {stats = {Stats.SPD}, modifier = -2, chance = 1}, -- Metal Sound
+		[321] = {stats = {Stats.ATK, Stats.DEF}, modifier = -1, chance = 1}, -- Tickle
+		[330] = {stats = {Stats.ACC}, modifier = -1, chance = 0.3}, -- Muddy Water
+		[341] = {stats = {Stats.SPE}, modifier = -1, chance = 1}, -- Mud Shot
+	}
 
-ModifiesOwnStat = {
-	[14] = {stats = {Stats.ATK}, modifier = 2, chance = 1}, -- Swords Dance
-	[74] = {stats = {Stats.SPA}, modifier = 1, chance = 1}, -- Growth
-	[96] = {stats = {Stats.ATK}, modifier = 1, chance = 1}, -- Meditate
-	[97] = {stats = {Stats.SPE}, modifier = 2, chance = 1}, -- Agility
-	[99] = {stats = {Stats.ATK}, modifier = 1, chance = 0.5}, -- Rage TODO impove rating method
-	[104] = {stats = {Stats.EVA}, modifier = 1, chance = 1}, -- Double Team
-	[106] = {stats = {Stats.DEF}, modifier = 1, chance = 1}, -- Harden
-	[107] = {stats = {Stats.EVA}, modifier = 1, chance = 1}, -- Minimize
-	[110] = {stats = {Stats.DEF}, modifier = 1, chance = 1}, -- Withdraw
-	[111] = {stats = {Stats.DEF}, modifier = 1, chance = 1}, -- Defense Curl
-	[112] = {stats = {Stats.DEF}, modifier = 2, chance = 1}, -- Barrier
-	[113] = {stats = {Stats.SPD}, modifier = 2, chance = 1}, -- Light Screen TODO
-	[115] = {stats = {Stats.DEF}, modifier = 2, chance = 1}, -- Reflect TODO
-	[116] = {stats = {Stats.CRT}, modifier = 2, chance = 1}, -- Focus Energy
-	[130] = {stats = {Stats.DEF}, modifier = 1, chance = 1}, -- Skull Bash
-	[133] = {stats = {Stats.SPD}, modifier = 2, chance = 1}, -- Amnesia
-	[151] = {stats = {Stats.DEF}, modifier = 2, chance = 1}, -- Acid Armor
-	[159] = {stats = {Stats.ATK}, modifier = 1, chance = 1}, -- Sharpen TODO curse move 174
-	[211] = {stats = {Stats.DEF}, modifier = 1, chance = 0.1}, -- Steel Wing
-	[232] = {stats = {Stats.ATK}, modifier = 1, chance = 0.1}, -- Metal Claw
-	[246] = {stats = {Stats.ATK, Stats.SPE, Stats.DEF, Stats.SPA, Stats.SPD}, modifier = 1, chance = 0.1}, -- Ancient Power
-	[276] = {stats = {Stats.ATK, Stats.DEF}, modifier = -1, chance = 1}, -- Superpower
-	[294] = {stats = {Stats.SPA}, modifier = 2, chance = 1}, -- Tail Glow
-	[309] = {stats = {Stats.ATK}, modifier = 1, chance = 0.2}, -- Meteor Mash
-	[315] = {stats = {Stats.SPA}, modifier = -2, chance = 1}, -- Overheat
-	[318] = {stats = {Stats.ATK, Stats.SPE, Stats.DEF, Stats.SPA, Stats.SPD}, modifier = 1, chance = 0.1}, -- Silver Wind
-	[322] = {stats = {Stats.SPD, Stats.DEF}, modifier = 1, chance = 1}, -- Cosmic Power
-	[334] = {stats = {Stats.DEF}, modifier = 2, chance = 1}, -- Iron Defense
-	[336] = {stats = {Stats.ATK}, modifier = 1, chance = 1}, -- Howl
-	[339] = {stats = {Stats.ATK, Stats.DEF}, modifier = 1, chance = 1}, -- Bulk Up
-	[347] = {stats = {Stats.SPA, Stats.SPD}, modifier = 1, chance = 1}, -- Calm Mind
-	[349] = {stats = {Stats.ATK, Stats.SPE}, modifier = 1, chance = 1}, -- Dragon Dance
-	[354] = {stats = {Stats.SPA}, modifier = -2, chance = 1}, -- Psycho Boost
-}
+	ModifiesOwnStat = {
+		[14] = {stats = {Stats.ATK}, modifier = 2, chance = 1}, -- Swords Dance
+		[74] = {stats = {Stats.SPA}, modifier = 1, chance = 1}, -- Growth
+		[96] = {stats = {Stats.ATK}, modifier = 1, chance = 1}, -- Meditate
+		[97] = {stats = {Stats.SPE}, modifier = 2, chance = 1}, -- Agility
+		[99] = {stats = {Stats.ATK}, modifier = 1, chance = 0.5}, -- Rage TODO impove rating method
+		[104] = {stats = {Stats.EVA}, modifier = 1, chance = 1}, -- Double Team
+		[106] = {stats = {Stats.DEF}, modifier = 1, chance = 1}, -- Harden
+		[107] = {stats = {Stats.EVA}, modifier = 1, chance = 1}, -- Minimize
+		[110] = {stats = {Stats.DEF}, modifier = 1, chance = 1}, -- Withdraw
+		[111] = {stats = {Stats.DEF}, modifier = 1, chance = 1}, -- Defense Curl
+		[112] = {stats = {Stats.DEF}, modifier = 2, chance = 1}, -- Barrier
+		[113] = {stats = {Stats.SPD}, modifier = 2, chance = 1}, -- Light Screen TODO
+		[115] = {stats = {Stats.DEF}, modifier = 2, chance = 1}, -- Reflect TODO
+		[116] = {stats = {Stats.CRT}, modifier = 2, chance = 1}, -- Focus Energy
+		[130] = {stats = {Stats.DEF}, modifier = 1, chance = 1}, -- Skull Bash
+		[133] = {stats = {Stats.SPD}, modifier = 2, chance = 1}, -- Amnesia
+		[151] = {stats = {Stats.DEF}, modifier = 2, chance = 1}, -- Acid Armor
+		[159] = {stats = {Stats.ATK}, modifier = 1, chance = 1}, -- Sharpen TODO curse move 174
+		[211] = {stats = {Stats.DEF}, modifier = 1, chance = 0.1}, -- Steel Wing
+		[232] = {stats = {Stats.ATK}, modifier = 1, chance = 0.1}, -- Metal Claw
+		[246] = {stats = {Stats.ATK, Stats.SPE, Stats.DEF, Stats.SPA, Stats.SPD}, modifier = 1, chance = 0.1}, -- Ancient Power
+		[276] = {stats = {Stats.ATK, Stats.DEF}, modifier = -1, chance = 1}, -- Superpower
+		[294] = {stats = {Stats.SPA}, modifier = 2, chance = 1}, -- Tail Glow
+		[309] = {stats = {Stats.ATK}, modifier = 1, chance = 0.2}, -- Meteor Mash
+		[315] = {stats = {Stats.SPA}, modifier = -2, chance = 1}, -- Overheat
+		[318] = {stats = {Stats.ATK, Stats.SPE, Stats.DEF, Stats.SPA, Stats.SPD}, modifier = 1, chance = 0.1}, -- Silver Wind
+		[322] = {stats = {Stats.SPD, Stats.DEF}, modifier = 1, chance = 1}, -- Cosmic Power
+		[334] = {stats = {Stats.DEF}, modifier = 2, chance = 1}, -- Iron Defense
+		[336] = {stats = {Stats.ATK}, modifier = 1, chance = 1}, -- Howl
+		[339] = {stats = {Stats.ATK, Stats.DEF}, modifier = 1, chance = 1}, -- Bulk Up
+		[347] = {stats = {Stats.SPA, Stats.SPD}, modifier = 1, chance = 1}, -- Calm Mind
+		[349] = {stats = {Stats.ATK, Stats.SPE}, modifier = 1, chance = 1}, -- Dragon Dance
+		[354] = {stats = {Stats.SPA}, modifier = -2, chance = 1}, -- Psycho Boost
+	}
 
-IsHighCritMove = {
-	[ 2] = true, -- Karate Chop
-	[ 75] = true, -- Razor Leaf
-	[ 143] = true, -- Sky Attack
-	[ 152] = true, -- Crab Hammer
-	[ 163] = true, -- Slash
-	[ 177] = true, -- Aeroblast
-	[ 238] = true, -- Cross Chop
-	[ 299] = true, -- Blaze Kick
-	[ 314] = true, -- Air Cutter
-	[ 342] = true, -- Poison Tail
-	[ 348] = true, -- Leaf Blade
-}
+	IsHighCritMove = {
+		[ 2] = true, -- Karate Chop
+		[ 75] = true, -- Razor Leaf
+		[ 143] = true, -- Sky Attack
+		[ 152] = true, -- Crab Hammer
+		[ 163] = true, -- Slash
+		[ 177] = true, -- Aeroblast
+		[ 238] = true, -- Cross Chop
+		[ 299] = true, -- Blaze Kick
+		[ 314] = true, -- Air Cutter
+		[ 342] = true, -- Poison Tail
+		[ 348] = true, -- Leaf Blade
+	}
 
-IsTypelessMove = { -- Moves which inflict typeless damage (unaffected by STAB)
-	[248] = true, -- Future Sight
-	[251] = true, -- Beat Up
-	[353] = true, -- Doom Desire
-}
+	IsTypelessMove = { -- Moves which inflict typeless damage (unaffected by STAB)
+		[248] = true, -- Future Sight
+		[251] = true, -- Beat Up
+		[353] = true, -- Doom Desire
+	}
 
-IsOHKOMove = {
-	[ 12] = true, -- Guillotine
-	[ 32] = true, -- Horn Drill
-	[ 90] = true, -- Fissure
-	[329] = true, -- Sheer Cold
-}
+	IsOHKOMove = {
+		[ 12] = true, -- Guillotine
+		[ 32] = true, -- Horn Drill
+		[ 90] = true, -- Fissure
+		[329] = true, -- Sheer Cold
+	}
 
-IsRecoilMove = {
-	[ 36] = true, -- Take Down
-	[ 38] = true, -- Double-Edge
-	[ 66] = true, -- Submission
-	[344] = true, -- Volt Tackle
-}
+	IsRecoilMove = {
+		[ 36] = true, -- Take Down
+		[ 38] = true, -- Double-Edge
+		[ 66] = true, -- Submission
+		[344] = true, -- Volt Tackle
+	}
 
-IsJumpKick = {
-	[ 26] = true, -- Jump Kick
-	[ 136] = true, -- High Jump Kick
-}
+	IsJumpKick = {
+		[ 26] = true, -- Jump Kick
+		[ 136] = true, -- High Jump Kick
+	}
 
-IsBindMove = {
-	[ 20] = true, -- Bind
-	[ 35] = true, -- Wrap
-	[ 83] = true, -- Fire Spin
-	[ 128] = true, -- Clamp
-	[ 250] = true, -- Whirlpool
-	[ 328] = true, -- Sand Tomb
-}
+	IsBindMove = {
+		[ 20] = true, -- Bind
+		[ 35] = true, -- Wrap
+		[ 83] = true, -- Fire Spin
+		[ 128] = true, -- Clamp
+		[ 250] = true, -- Whirlpool
+		[ 328] = true, -- Sand Tomb
+	}
 
-IsDrainMove = {
-	[ 71] = true, -- Absorb
-	[ 72] = true, -- Mega Drain
-	[ 138] = true, -- Dream Eater
-	[ 141] = true, -- Leech Life
-	[ 202] = true, -- Giga Drain
-}
+	IsDrainMove = {
+		[ 71] = true, -- Absorb
+		[ 72] = true, -- Mega Drain
+		[ 138] = true, -- Dream Eater
+		[ 141] = true, -- Leech Life
+		[ 202] = true, -- Giga Drain
+	}
 
-IsHighPriorityMove = {
-	[ 98] = true, -- Quick Attack
-	[ 182] = true, -- Mach Punch
-	[ 245] = true, -- Extreme Speed
-	[ 252] = true, -- Fake Out
-}
+	IsHighPriorityMove = {
+		[ 98] = true, -- Quick Attack
+		[ 182] = true, -- Mach Punch
+		[ 245] = true, -- Extreme Speed
+		[ 252] = true, -- Fake Out
+	}
 
-IsItemStealMove = {
-	[ 168] = true, -- Thief
-	[ 271] = true, -- Trick
-	[ 343] = true, -- Covet
-}
+	IsItemStealMove = {
+		[ 168] = true, -- Thief
+		[ 271] = true, -- Trick
+		[ 343] = true, -- Covet
+	}
 
-SkipsTurnAfterwards = {
-	[ 63] = true, -- Hyper Beam
-	[ 307] = true, -- Blast Burn
-	[ 308] = true, -- Hydro Cannon
-	[ 338] = true, -- Frenzy Plant
-}
+	SkipsTurnAfterwards = {
+		[ 63] = true, -- Hyper Beam
+		[ 307] = true, -- Blast Burn
+		[ 308] = true, -- Hydro Cannon
+		[ 338] = true, -- Frenzy Plant
+	}
 
-IsHitAfter3TurnsMove = {
-	[ 248] = true, -- Future Sight
-	[ 281] = true, -- Yawn
-	[ 353] = true, -- Doom Desire
-}
+	IsHitAfter3TurnsMove = {
+		[ 248] = true, -- Future Sight
+		[ 281] = true, -- Yawn
+		[ 353] = true, -- Doom Desire
+	}
 
--- 1 = generic, 2 = skipped by sun, 3 = under ground, 4 = under water, 5 = flying
-HasPreparationTurn = {
-	[ 13] = 1, -- Razor Wind
-	[ 19] = 5, -- Fly
-	[ 76] = 2, -- Solar Beam
-	[ 91] = 3, -- Dig
-	[ 130] = 1, -- Skull Bash
-	[ 143] = 1, -- Sky Attack
-	[ 291] = 4, -- Dive
-	[ 340] = 5, -- Bounce
-}
+	-- 1 = generic, 2 = skipped by sun, 3 = under ground, 4 = under water, 5 = flying
+	HasPreparationTurn = {
+		[ 13] = 1, -- Razor Wind
+		[ 19] = 5, -- Fly
+		[ 76] = 2, -- Solar Beam
+		[ 91] = 3, -- Dig
+		[ 130] = 1, -- Skull Bash
+		[ 143] = 1, -- Sky Attack
+		[ 291] = 4, -- Dive
+		[ 340] = 5, -- Bounce
+	}
 
-LockInMoves = {
-	[ 37] = true, --Thrash
-	[ 80] = true, --Petal Dance
-	[ 200] = true, --Outrage
-	[ 205] = true, --Rollout
-	[ 253] = true, --Uproar
-	[ 301] = true, --Ice Ball
-}
+	LockInMoves = {
+		[ 37] = true, --Thrash
+		[ 80] = true, --Petal Dance
+		[ 200] = true, --Outrage
+		[ 205] = true, --Rollout
+		[ 253] = true, --Uproar
+		[ 301] = true, --Ice Ball
+	}
 
-ConfusesSelf = {
-	[ 37] = true, --Thrash
-	[ 80] = true, --Petal Dance
-	[ 200] = true, --Outrage
-}
+	ConfusesSelf = {
+		[ 37] = true, --Thrash
+		[ 80] = true, --Petal Dance
+		[ 200] = true, --Outrage
+	}
 
-DoublesDmgOverTime = {
-	[ 205] = true, --Rollout 		90% acc
-	[ 210] = true, --Fury Cutter 	95% acc
-	[ 301] = true, --Ice Ball 		90% acc
-}
+	DoublesDmgOverTime = {
+		[ 205] = true, --Rollout 		90% acc
+		[ 210] = true, --Fury Cutter 	95% acc
+		[ 301] = true, --Ice Ball 		90% acc
+	}
 
-IsLowPriorityMove = {
-	[ 233] = true, -- Vital Throw
-	[ 264] = true, -- Focus Punch
-	[ 279] = true, -- Revenge
-}
+	IsLowPriorityMove = {
+		[ 233] = true, -- Vital Throw
+		[ 264] = true, -- Focus Punch
+		[ 279] = true, -- Revenge
+	}
 
-RequiresOpponentAsleep = {
-	[ 138] = true, -- Dream Eater
-	[ 171] = true, -- Nightmare
-}
+	RequiresOpponentAsleep = {
+		[ 138] = true, -- Dream Eater
+		[ 171] = true, -- Nightmare
+	}
 
-BonusIfEnemyParalyzed = {
-	[ 265] = true, -- Smelling Salts
-}
+	BonusIfEnemyParalyzed = {
+		[ 265] = true, -- Smelling Salts
+	}
 
--- TODO move this to json to enable moving moves between groups in the json
-SmallPositiveSideEffect = {
-	[ 172] = true, -- Flame Wheel (thaws)
-	[ 221] = true, -- Sacred Fire (thaws)
-	[ 229] = true, -- Rapid Spin (removes binds / leech seed)
-	[ 253] = true, --	Uproar (prevents sleep)
-	[ 280] = true, -- Brick Break (removes Barrier / Light Screen)
-}
+	-- TODO move this to json to enable moving moves between groups in the json
+	SmallPositiveSideEffect = {
+		[ 172] = true, -- Flame Wheel (thaws)
+		[ 221] = true, -- Sacred Fire (thaws)
+		[ 229] = true, -- Rapid Spin (removes binds / leech seed)
+		[ 253] = true, --	Uproar (prevents sleep)
+		[ 280] = true, -- Brick Break (removes Barrier / Light Screen)
+	}
 
--- TODO should use this section to the rating json long term
-SmallBonus = {
-	[ 16] = true, -- Gust 				(double dmg vs flying target)
-	[ 23] = true, -- Stomp 				(double dmg vs minimized target)
-	[ 87] = true, -- Thunder 			(hits flying targets)
-	[ 89] = true, -- Earthquake 		(double dmg vs digging target)
-	[ 222] = true, -- Magnitude 		(double dmg vs digging target)
-	[ 228] = true, -- Pursuit 			(double dmg vs switching mon)
-	[ 239] = true, -- Twister 			(double dmg vs flying target)
-	[ 263] = true, -- Facade 			(double dmg if own non-volile status)
-	[ 265] = true, -- Smelling Salt 	(double dmg vs paralyzed targets, but cures)
-	[ 302] = true, -- Needle Arm 		(double dmg vs minimized target)
-	[ 310] = true, -- Astonish 			(double dmg vs minimized target)
-	[ 326] = true, -- Extrasensory 		(double dmg vs minimized target)
-	[ 327] = true, -- Sky Uppercut 		(hits flying targets)
-}
+	-- TODO should use this section to the rating json long term
+	SmallBonus = {
+		[ 16] = true, -- Gust 				(double dmg vs flying target)
+		[ 23] = true, -- Stomp 				(double dmg vs minimized target)
+		[ 87] = true, -- Thunder 			(hits flying targets)
+		[ 89] = true, -- Earthquake 		(double dmg vs digging target)
+		[ 222] = true, -- Magnitude 		(double dmg vs digging target)
+		[ 228] = true, -- Pursuit 			(double dmg vs switching mon)
+		[ 239] = true, -- Twister 			(double dmg vs flying target)
+		[ 263] = true, -- Facade 			(double dmg if own non-volile status)
+		[ 265] = true, -- Smelling Salt 	(double dmg vs paralyzed targets, but cures)
+		[ 302] = true, -- Needle Arm 		(double dmg vs minimized target)
+		[ 310] = true, -- Astonish 			(double dmg vs minimized target)
+		[ 326] = true, -- Extrasensory 		(double dmg vs minimized target)
+		[ 327] = true, -- Sky Uppercut 		(hits flying targets)
+	}
 
--- handled as specific move -> not used
-IsFirstTurnOnlyMove = {
-	[ 252] = true, -- Fake Out
-}
+	-- handled as specific move -> not used
+	IsFirstTurnOnlyMove = {
+		[ 252] = true, -- Fake Out
+	}
 
--- handled as specific move -> not used
-FailsIfDamaged = {
-	[ 264] = true, -- Focus Punch
-}
+	-- handled as specific move -> not used
+	FailsIfDamaged = {
+		[ 264] = true, -- Focus Punch
+	}
 
--- 1 = Clear, 2 = Hail, 3 = Rain, 4 = Sunny, 5 = Sandstorm, not used
-DmgModifiedByWeather = {
-	[ 76] = {[2]=0.5,[3]=0.5,[5]=0.5}, -- Solar Beam
-}
+	-- 1 = Clear, 2 = Hail, 3 = Rain, 4 = Sunny, 5 = Sandstorm, not used
+	DmgModifiedByWeather = {
+		[ 76] = {[2]=0.5,[3]=0.5,[5]=0.5}, -- Solar Beam
+	}
 
--- 1 = Clear, 2 = Hail, 3 = Rain, 4 = Sunny, 5 = Sandstorm, not used
-AccuracySetByWeather = {
-	[ 87] = {[3]=1, [4]=0.5}, -- Thunder
-}
+	-- 1 = Clear, 2 = Hail, 3 = Rain, 4 = Sunny, 5 = Sandstorm, not used
+	AccuracySetByWeather = {
+		[ 87] = {[3]=1, [4]=0.5}, -- Thunder
+	}
 
--- not used
-SetsUpMove = {
-	[ 111] = true, --Defense Curl (sets up rollout / ice ball)
-}
+	-- not used
+	SetsUpMove = {
+		[ 111] = true, --Defense Curl (sets up rollout / ice ball)
+	}
 
--- not used
-IsRemoveItemMove = {
-	[ 282] = true, -- Knock Off
-}
+	-- not used
+	IsRemoveItemMove = {
+		[ 282] = true, -- Knock Off
+	}
 
--- enemy using metronome -> dive not likely enough, not used
-NoBonusAsNotLikely = {
-	[ 57] = true, -- Surf 			(double dmg vs diving target)
-	[ 250] = true, -- Whirlpool 		(double dmg vs diving target)
-}
+	-- enemy using metronome -> dive not likely enough, not used
+	NoBonusAsNotLikely = {
+		[ 57] = true, -- Surf 			(double dmg vs diving target)
+		[ 250] = true, -- Whirlpool 		(double dmg vs diving target)
+	}
 
--- not used
-RequiresSelfSleep = {
-	[ 173] = true, -- Snore
-	[ 214] = true, -- Sleep Talk
-}
+	-- not used
+	RequiresSelfSleep = {
+		[ 173] = true, -- Snore
+		[ 214] = true, -- Sleep Talk
+	}
 
 
----Determines (guesses) at the expected numerical power of a given move. For example, average power for multi-hit moves, or max power for HP based moves.
----@param moveId number
----@return number
-function self.getExpectedPowerForRating(moveId)
-	if not MoveData.isValid(moveId) then
-		return 0
+	---Determines (guesses) at the expected numerical power of a given move. For example, average power for multi-hit moves, or max power for HP based moves.
+	---@param moveId number
+	---@return number
+	function self.getExpectedPowerForRating(moveId)
+		if not MoveData.isValid(moveId) then
+			return 0
 
-	elseif moveId == MoveData.Values.EruptionId or moveId == MoveData.Values.WaterSpoutId then
-		return 120
-	elseif moveId == MoveData.Values.FrustrationId then
-		return 40
-	elseif moveId == MoveData.Values.FlailId or moveId == MoveData.Values.ReversalId then
-		return 60
-	elseif moveId == MoveData.Values.LowKickId then
-		return 80
-	elseif moveId == MoveData.Values.ReturnId then
-		return 102
-	elseif moveId == MoveData.Values.FrustrationId then
-		return 50
-	elseif moveId == MoveData.Values.TripleKickId then
-		return 60
+		elseif moveId == MoveData.Values.EruptionId or moveId == MoveData.Values.WaterSpoutId then
+			return 120
+		elseif moveId == MoveData.Values.FrustrationId then
+			return 40
+		elseif moveId == MoveData.Values.FlailId or moveId == MoveData.Values.ReversalId then
+			return 60
+		elseif moveId == MoveData.Values.LowKickId then
+			return 80
+		elseif moveId == MoveData.Values.ReturnId then
+			return 102
+		elseif moveId == MoveData.Values.FrustrationId then
+			return 50
+		elseif moveId == MoveData.Values.TripleKickId then
+			return 60
+		end
+
+		local power = tonumber(MoveData.Moves[moveId].power) or 0
+		if self.MoveCategory.DoubleHitMoves[moveId] then
+			return (power * 2)
+		elseif self.MoveCategory.MultiHitMoves[moveId] then
+			-- Average of 3 hits
+			return (power * 3)
+		end
+
+		return power
 	end
 
-	local power = tonumber(MoveData.Moves[moveId].power) or 0
-	if self.MoveCategory.DoubleHitMoves[moveId] then
-		return (power * 2)
-	elseif self.MoveCategory.MultiHitMoves[moveId] then
-		-- Average of 3 hits
-		return (power * 3)
-	end
+	self.MoveCategory = {
 
-	return power
-end
-
-self.MoveCategory = {
-
--- https://bulbapedia.bulbagarden.net/wiki/Multi-strike_move#Variable_number_of_strikes
-["MultiHitMoves"] = {
-	[292] = true, [140] = true, [198] = true, [331] = true, [4] = true, [3] = true,
-	[31] = true, [154] = true, [333] = true, [42] = true, [350] = true, [131] = true
-},
--- https://bulbapedia.bulbagarden.net/wiki/Multi-strike_move#Fixed_number_of_multiple_strikes
-["DoubleHitMoves"] = {
-	[155] = true, [41] = true, [24] = true
-},
-["HealMove"] = {
-	105, -- recover
-	135, -- softboiled
-	156, -- rest
-	208, -- milk drink
-	220, -- pain split
-	234, -- morning sun
-	235, -- synthesis
-	236, -- moonlight
-	256, -- swallow
-	273, -- wish
-	275, -- ingrain
-	303 -- slack off
-},
-["StatusHealMove"] = {
-	215, -- heal bell
-	287, -- refresh
-	312 -- aromatherapy
-},
-["DrainMove"] = {
-	71, -- absorb
-	72, -- mega drain
-	138, -- dream eater
-	141, -- leech life
-	202, -- giga drain
-	356 -- <fairy drain move>
-},
-["HM"] = {
-	15, 	-- cut 
-	19, 	-- fly
-	57, 	-- surf
-	70, 	-- strength
-	127, 	-- waterfall
-	148, 	-- flash
-	249, 	-- rock smash
-	291 	-- dive
-}
-}
-self.SporeId = 147
-self.LeechSeedId = 73
+	-- https://bulbapedia.bulbagarden.net/wiki/Multi-strike_move#Variable_number_of_strikes
+	["MultiHitMoves"] = {
+		[292] = true, [140] = true, [198] = true, [331] = true, [4] = true, [3] = true,
+		[31] = true, [154] = true, [333] = true, [42] = true, [350] = true, [131] = true
+	},
+	-- https://bulbapedia.bulbagarden.net/wiki/Multi-strike_move#Fixed_number_of_multiple_strikes
+	["DoubleHitMoves"] = {
+		[155] = true, [41] = true, [24] = true
+	},
+	["HealMove"] = {
+		105, -- recover
+		135, -- softboiled
+		156, -- rest
+		208, -- milk drink
+		220, -- pain split
+		234, -- morning sun
+		235, -- synthesis
+		236, -- moonlight
+		256, -- swallow
+		273, -- wish
+		275, -- ingrain
+		303 -- slack off
+	},
+	["StatusHealMove"] = {
+		215, -- heal bell
+		287, -- refresh
+		312 -- aromatherapy
+	},
+	["DrainMove"] = {
+		71, -- absorb
+		72, -- mega drain
+		138, -- dream eater
+		141, -- leech life
+		202, -- giga drain
+		356 -- <fairy drain move>
+	},
+	["HM"] = {
+		15, 	-- cut 
+		19, 	-- fly
+		57, 	-- surf
+		70, 	-- strength
+		127, 	-- waterfall
+		148, 	-- flash
+		249, 	-- rock smash
+		291 	-- dive
+	}
+	}
+	self.SporeId = 147
+	self.LeechSeedId = 73
 
 	return self
 end

@@ -103,7 +103,7 @@
 		"208": 9,
 		"212": 0,
 		"214": 1,
-		"215": 0,
+		"215": 7,
 		"217": 5,
 		"219": 3,
 		"220": 7,
@@ -146,7 +146,7 @@
 		"300": 0,
 		"303": 9,
 		"311": 5.85,
-		"312": 0,
+		"312": 7,
 		"316": 3,
 		"335": 0,
 		"346": 0,
@@ -393,7 +393,37 @@
 				147
 			],
 			"BannedMoveException": [15],
-			"Changes": {}
+			"Changes": {
+				"ModifierAndRatings": {
+					"ModifierPower": 0.08,
+					"ModifierAccuracyPenalty": 1.7,
+
+					"RatingHasFullyAccurateDamagingMove": 1,
+					"RatingShedCoverage": 7,
+
+					"ModifierPP": {
+						"5": 0.6,
+						"10": 0.9,
+						"15": 1.2,
+						"20": 1.5,
+						"25": 1.8,
+						"30": 2,
+						"35": 2.2,
+						"40": 2.4
+					},
+					"ModifierMove": {
+						"Setup": 0.3
+					},
+					"RatingAbilitySandStreamUnsafe": -15,
+					"RatingOHKO": 3,
+					"ModifierRecoil": 0.3,
+					"ModifierHasGenericPreparationTurn": 0.4,
+					"RatingItemSteal": 1,
+					"RatingItemStealMinimum": 2,
+					"RatingDrainMove": 5,
+					"ModifierContact": 0.9
+				}
+			}
 		},
 		"SurvivalRevival": {
 			"BannedAbilities": [
@@ -418,7 +448,6 @@
 			"BannedMoves": [
 				"HM",
 				"HealMove",
-				73,
 				147
 			],
 			"AdjustedMoves": {
@@ -426,25 +455,38 @@
 			},
 			"Changes": {
 				"ModifierAndRatings": {
-					"ModifierPower": 0.075,
+					"ModifierPower": 0.08,
 					"ModifierAccuracyPenalty": 1.7,
 
 					"RatingHasFullyAccurateDamagingMove": 1,
 					"RatingShedCoverage": 7,
 
 					"ModifierPP": {
-						"5": 0.5,
-						"10": 0.8,
-						"15": 1,
-						"20": 1.2,
-						"25": 1.4,
-						"30": 1.6,
-						"35": 1.8,
-						"40": 2
+						"5": 0.6,
+						"10": 0.9,
+						"15": 1.2,
+						"20": 1.5,
+						"25": 1.8,
+						"30": 2,
+						"35": 2.2,
+						"40": 2.4
 					},
 					"ModifierMove": {
 						"Setup": 0.3
-					}
+					},
+					"RatingOnHitEffect": {
+						"burn": 3,
+						"poison": 2,
+						"toxic": 2
+					},
+					"RatingAbilitySandStreamUnsafe": -15,
+					"RatingOHKO": 3,
+					"ModifierRecoil": 0.3,
+					"ModifierHasGenericPreparationTurn": 0.4,
+					"RatingItemSteal": 1,
+					"RatingItemStealMinimum": 2,
+					"RatingDrainMove": 5,
+					"ModifierContact": 0.9
 				}
 			}
 		},
