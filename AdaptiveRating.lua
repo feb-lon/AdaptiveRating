@@ -1,7 +1,7 @@
 local function AdaptiveRating()
 	-- Define descriptive attributes of the custom extension that are displayed on the Tracker settings
 	local self = {}
-	self.version = "0.2"
+	self.version = "0.3"
 	self.name = "AdaptiveRating"
 	self.author = "Feblon"
 	self.description = "Alternative to the default gachamon rating calculation."
@@ -30,6 +30,7 @@ local function AdaptiveRating()
 			ModifierAndRatings = {},
 			Rulesets = {}
 		}
+		
 		-- Abilities
 		for idStr, rating in pairs(data.Abilities or {}) do
 			local id = tonumber(idStr)
@@ -37,6 +38,7 @@ local function AdaptiveRating()
 				RS.Abilities[id] = rating
 			end
 		end
+
 		-- FixedRatingMove
 		for idStr, rating in pairs(data.FixedRatingMove or {}) do
 			local id = tonumber(idStr)
@@ -44,14 +46,17 @@ local function AdaptiveRating()
 				RS.FixedRatingMove[id] = rating
 			end
 		end
+
 		-- Stats
 		for key, val in pairs(data.Stats or {}) do
 			RS.Stats[key] = val
 		end
+
 		-- ModifierAndRatings
 		for key, val in pairs(data.ModifierAndRatings or {}) do
 			RS.ModifierAndRatings[key] = val
 		end
+
 		-- Rulesets
 		for rulesetName, rulesetData in pairs(data.Rulesets or {}) do
 			ruleset = {}
@@ -83,62 +88,13 @@ local function AdaptiveRating()
 
 		self.oldRef1 = GachaMonData.calculateRatingScore
 		GachaMonData.calculateRatingScore = self.calculateRatingScore
-		self.oldRef2 = GachaMonData.updateMainScreenViewedGachaMon
-		GachaMonData.updateMainScreenViewedGachaMon = self.updateMainScreenViewedGachaMon
 	end
 
 	function self.unload()
 		GachaMonData.calculateRatingScore = self.oldRef1
-		GachaMonData.updateMainScreenViewedGachaMon = self.oldRef2
-	end
-
-	function self.updateMainScreenViewedGachaMon(needsRecalculating)
-		needsRecalculating = needsRecalculating or false
-
-		if not GachaMonData.isCompatibleWithEmulator() then
-			return
-		end
-
-		local viewedPokemon = Battle.getViewedPokemon(true)
-		if not viewedPokemon then
-			GachaMonData.playerViewedMon = nil
-			GachaMonData.playerViewedInitialStars = 0
-			return
-		end
-
-		local prevGachamon = GachaMonData.playerViewedMon or {}
-		-- Check if gachamon is new or different mon
-		if not needsRecalculating then
-			needsRecalculating = (prevGachamon.PokemonId ~= viewedPokemon.pokemonID) or (prevGachamon.Level ~= viewedPokemon.level)
-		end
-
-		-- Check if it learned any new moves
-		if not needsRecalculating then
-			local prevMoveIds = prevGachamon:getMoveIds() or {}
-			local currentMoves = viewedPokemon.moves or {}
-			for i = 1, 4, 1 do
-				if currentMoves[i] and currentMoves[i].id ~= prevMoveIds[i] then
-					needsRecalculating = true
-					break
-				end
-			end
-		end
-
-		if not needsRecalculating then
-			return
-		end
-
-		local viewedGachamon = GachaMonData.convertPokemonToGachaMon(viewedPokemon)
-		local recentGachamon = GachaMonData.getAssociatedRecentMon(viewedGachamon)
-		if recentGachamon then
-			-- Always reset the initial stars to original card; do this every time the mon gets rerolled (in case the mon changes)
-			GachaMonData.playerViewedMon = viewedGachamon
-			GachaMonData.playerViewedInitialStars = recentGachamon:getStars() or 0
-		end
 	end
 
 	function self.changeRuleset(ruleset, key)
-		Utils.printDebug("changing Ruleset to " .. key)
 		local usedRuleset = {
 			Key = key,
 			Abilities = self.RS.Abilities,
@@ -164,7 +120,6 @@ local function AdaptiveRating()
 	end
 
 	function self.calculateRatingScore(gachamon, baseStats)
-		Utils.printDebug("---------------------start------------------------")
 
 		local RS = self.usedRuleset
 
@@ -245,7 +200,6 @@ local function AdaptiveRating()
 			end
 			conditionsAchieved[conditions.hasShedCoverage] = true
 		end
-		Utils.printDebug("Fixed Score for our Ability: " .. abilityRating)
 		ratingTotal = ratingTotal + abilityRating
 
 
@@ -298,11 +252,9 @@ local function AdaptiveRating()
 			speedValue = (speedRating - minRating) / (maxRating - minRating)
 
 		else
-			Utils.printDebug("invalid speed evaluation method")
 		end
 
 		ratingTotal = ratingTotal + speedRating
-		Utils.printDebug("speed rating: " .. speedRating)
 
 		-- OFFENSE
 
@@ -340,15 +292,11 @@ local function AdaptiveRating()
 					specialPowerRating = specialPowerRating * (minModifier + (baseSPA - maxPenaltyAt) / (centerAt - maxPenaltyAt))
 				end
 			end
-			Utils.printDebug("atk rating: " .. phAtkRating)
-			Utils.printDebug("spa rating: " .. spAtkRating)
 		else
-			Utils.printDebug("invalid offense evaluation method")
 		end
 
 		if (ownAbility == (AbilityData.Values.HugePowerId or 37) or ownAbility == (AbilityData.Values.PurePowerId or 74)) and phAtkRating > 0 then
 			ratingTotal = ratingTotal + phAtkRating
-			Utils.printDebug("Rating gain due to huge power: " .. phAtkRating)
 		end
 
 
@@ -397,15 +345,12 @@ local function AdaptiveRating()
 			end
 			
 			ratingTotal = ratingTotal + abilityTypingScore
-			Utils.printDebug("AbilityDefenseChangeScore: " .. abilityTypingScore)
 
-			Utils.printDebug("physical defense needed: " .. physicalDefenseNeeded)
-			Utils.printDebug("special defense needed: " .. specialDefenseNeeded)
 			local totalDefenseNeeded = physicalDefenseNeeded + specialDefenseNeeded
 			local spdPercentage = math.min(math.max(specialDefenseNeeded / totalDefenseNeeded, 0.34), 0.66)
 			local defPercentage = 1 - spdPercentage
 
-			-- compare with a flat-ish spread mon
+			-- compare with a flat-ish spread mon, use stats for lvl 50
 			local compStatsTotal = RS.Stats.Defense.Method.DefenseWanted or 0
 			if RS.Stats.Defense.Method.DefenseAmountBSTDependent then 
 				compStatsTotal =  (totalBST) * (compStatsTotal or 0) / 100
@@ -425,8 +370,6 @@ local function AdaptiveRating()
 
 			local defRating = (self.calculateCustomTanh(compPhDefTotal, ownPhDefTotal) * (-minRating + maxRating)+minRating) * defPercentage
 			local spdRating = (self.calculateCustomTanh(compSpDefTotal, ownSpDefTotal) * (-minRating + maxRating)+minRating) * spdPercentage
-			Utils.printDebug("physical defense rating: " .. defRating)
-			Utils.printDebug("special defense rating: " .. spdRating)
 
 			if defRating < 0 or spdRating < 0 then
 				defenseRating = math.min(defRating, 0) + math.min(spdRating, 0)
@@ -435,18 +378,13 @@ local function AdaptiveRating()
 			end
 			distanceToDefenseMinimum = 1 - (defenseRating / minRating)
 		else
-			Utils.printDebug("invalid defense evaluation method")
 		end
 
 		ratingTotal = ratingTotal + defenseRating
-		Utils.printDebug("defense rating: " .. defenseRating)
 
 		if speedRating < 0 and defenseRating < 0 then
-			--Utils.printDebug("Distance to Speed Min: -" .. distanceToSpeedMinimum)
-			--Utils.printDebug("Distance to Def Min: -" .. distanceToDefenseMinimum)
 			noSpeedNoDefPenalty = (RS.Stats.Penalties.NoSpeedAndNoDefense.PenaltyMax or 0) * (1-(distanceToDefenseMinimum*distanceToSpeedMinimum)^0.5)
 			ratingTotal = ratingTotal - noSpeedNoDefPenalty
-			Utils.printDebug("No Defense No Speed Penalty: -" .. noSpeedNoDefPenalty)
 		end
 
 
@@ -454,11 +392,11 @@ local function AdaptiveRating()
 
 		local iMoves = {}
 
-		local debug = false
+		local print_ratings = false
 		local movesRating = 0
 
 		local moves = gachamon.Temp.MoveIds or {}
-		if debug then
+		if print_ratings then
 			moves = {}
 			for i=1, 354 do 
 				moves[i] = i
@@ -483,9 +421,7 @@ local function AdaptiveRating()
 				ppRating = 0,
 				rating = 0
 			}
-			Utils.printDebug(MoveData.Moves[id].name)
 			if RS.BannedMoves[id or 0] then -- Remove rating if banned move
-				Utils.printDebug("banned move")
 				iMoves[i].rating = 0
 				if
 					PokemonData.Types.FLYING == iMoves[i].move.type or PokemonData.Types.ROCK == iMoves[i].move.type or
@@ -495,14 +431,11 @@ local function AdaptiveRating()
 				end
 			elseif RS.FixedRatingMove[id] then -- Moves with fixed rating
 				iMoves[i].rating = RS.FixedRatingMove[id]
-				Utils.printDebug("fixed rating: " .. iMoves[i].rating)
-				--Utils.printDebug(iMoves[i].rating)
 				-- currently all weather moves have fixed rating
 				if id == MoveData.Values.Sandstorm or id == MoveData.Values.Hail then
 					conditionsAchieved[conditions.hasShedCoverage] = true
 				end
 			elseif physcialMovesBanned and iMoves[i].move.category == MoveData.Categories.PHYSICAL and iMoves[i].ePower > 0 then
-				--Utils.printDebug("No Rating due to Huge/Pure Power")
 				if
 					PokemonData.Types.FLYING == iMoves[i].move.type or PokemonData.Types.ROCK == iMoves[i].move.type or
 						PokemonData.Types.GHOST == iMoves[i].move.type
@@ -518,7 +451,6 @@ local function AdaptiveRating()
 						-- only sheer cold does not have immune opponents
 						iMoves[i].rating = iMoves[i].rating * (RS.ModifierAndRatings.ModifierMoveWithoutPowerHasImmuneOpponents or 1)
 					end
-					Utils.printDebug("OHKO move: " .. iMoves[i].rating)
 				else
 					local setupAdjustment = 1
 					if iMoves[i].move.category == MoveData.Categories.STATUS then
@@ -540,7 +472,6 @@ local function AdaptiveRating()
 						if DoublesDmgOverTime[id] then
 							iMoves[i].powerRating = iMoves[i].powerRating * (RS.ModifierAndRatings.ModifierDoublesDamageOverTimePower or 1)
 						end
-						--Utils.printDebug("Power Rating: " .. iMoves[i].powerRating)
 
 						local moveType = iMoves[i].move.type or PokemonData.Types.UNKNOWN
 
@@ -549,15 +480,12 @@ local function AdaptiveRating()
 						--Weather
 						if ownAbility == (AbilityData.Values.DrizzleId or 2) or ownAbility == (AbilityData.Values.DroughtId or 70) then
 							iMoves[i].powerRating = (self.getAbilityTypeModifiers[moveType] or 1) * iMoves[i].powerRating
-							--Utils.printDebug("Weather modifies rating: " .. iMoves[i].powerRating)
 						end
 
 						if not IsTypelessMove[id] then -- Type Rating for moves with type
 							iMoves[i].powerRating = iMoves[i].powerRating * (RS.ModifierAndRatings.RatingMoveWithPowerType[moveType] or 1)
-							--Utils.printDebug("Type Value: " .. iMoves[i].powerRating)
-							if (not debug and Utils.isSTAB(iMoves[i].move, iMoves[i].move.type, pokemonTypes)) then
+							if (not print_ratings and Utils.isSTAB(iMoves[i].move, iMoves[i].move.type, pokemonTypes)) then
 								iMoves[i].powerRating = iMoves[i].powerRating * 1.5
-								--Utils.printDebug("STAB modifies rating: " .. iMoves[i].powerRating)
 							end
 							if
 								PokemonData.Types.FLYING == iMoves[i].move.type or PokemonData.Types.ROCK == iMoves[i].move.type or
@@ -573,34 +501,27 @@ local function AdaptiveRating()
 						end
 						if IsHighCritMove[id] then -- High Crit Chance
 							iMoves[i].powerRating = iMoves[i].powerRating * (RS.ModifierAndRatings.ModifierHighCrit or 1)
-							--Utils.printDebug("High Crit modifies rating: " .. iMoves[i].powerRating)
 						end
 						if IsRecoilMove[id] and ownAbility ~= 69 then -- recoil move and no rock head
 							iMoves[i].powerRating = iMoves[i].powerRating * (RS.ModifierAndRatings.ModifierRecoil or 1)
-							--Utils.printDebug("Move has recoil, but no rockhead.  New rating: " .. iMoves[i].powerRating)
 						end
 
 						---- flat ratings
 
 						if IsBindMove[id] then -- binds enemy
 							iMoves[i].powerRating = iMoves[i].powerRating + (RS.ModifierAndRatings.RatingWrapEnemy or 1)
-							--Utils.printDebug("binding move: " .. iMoves[i].powerRating)
 						end
 						if IsItemStealMove[id] then -- steals item
 							iMoves[i].powerRating = iMoves[i].powerRating + (RS.ModifierAndRatings.RatingItemSteal or 1)
-							--Utils.printDebug("stealing item move: " .. iMoves[i].powerRating)
 						end
 						if IsDrainMove[id] then -- Drain Move
 							iMoves[i].powerRating = iMoves[i].powerRating + (RS.ModifierAndRatings.RatingDrainMove or 1)
-							--Utils.printDebug("drain move: " .. iMoves[i].powerRating)
 						end
 						if SmallBonus[id] then
 							iMoves[i].powerRating = iMoves[i].powerRating + (RS.ModifierAndRatings.RatingSmallBonus or 1)
-							--Utils.printDebug("Small Bonus: " .. iMoves[i].powerRating)
 						end
 						if SmallPositiveSideEffect[id] then
 							iMoves[i].powerRating = iMoves[i].powerRating + (RS.ModifierAndRatings.RatingSmallPositiveSideEffect or 1)
-							--Utils.printDebug("Small Positive Side Effect Bonus: " .. iMoves[i].powerRating)
 						end
 
 						---- percentage modifiers 2
@@ -611,24 +532,18 @@ local function AdaptiveRating()
 								contactModifier = contactModifier * contactModifier
 							end
 							iMoves[i].powerRating = iMoves[i].powerRating * contactModifier
-							--Utils.printDebug("is contact: " .. iMoves[i].powerRating)
 						end
 						if IsLowPriorityMove[id] then -- Low Priority
 							iMoves[i].powerRating = iMoves[i].powerRating * (1 - (RS.ModifierAndRatings.ModifierLowPriorityMin or 0)*speedValue)
-							--Utils.printDebug("low prio: " .. iMoves[i].powerRating)
 						elseif IsHighPriorityMove[id] then --High Priority
 							iMoves[i].powerRating = iMoves[i].powerRating + (1-speedValue) * (RS.ModifierAndRatings.RatingHighPriorityMax or 1)
-							--Utils.printDebug("high prio: " .. iMoves[i].powerRating)
 						end
 
-						Utils.printDebug("Final power rating: " .. iMoves[i].powerRating)
 					else
-						Utils.printDebug("Damaging Move without Power has no Rating")
 					end
 
 					-- rate the move's value regarding status infliction, needs loop due to tri attack
 					for status, chance in pairs(StatusInflicted[id] or {}) do
-						Utils.printDebug("status Rating: " .. status)
 						local statusRating = RS.ModifierAndRatings.RatingOnHitEffect[status] or 0
 						if status == Status.SLEEP then
 							conditionsAchieved[conditions.hasSleepMove] = true
@@ -645,7 +560,6 @@ local function AdaptiveRating()
 							conditionsAchieved[conditions.hasShedCoverage] = true
 						end
 						iMoves[i].effectRating = iMoves[i].effectRating + statusRating * math.min(chance * (ownAbility == AbilityData.Values.SereneGraceId and 2 or 1), 1)
-						Utils.printDebug("new effect rating: " .. iMoves[i].effectRating)
 					end
 
 					-- rate the move's value regarding status drops on the opponent
@@ -655,14 +569,12 @@ local function AdaptiveRating()
 					local chance = (ModifiesEnemyStat[id] or {})["chance"] or 0
 					chance = math.min(chance * (ownAbility == AbilityData.Values.SereneGraceId and 2 or 1), 1)
 					for _, stat in ipairs((ModifiesEnemyStat[id] or {})["stats"] or {}) do
-						Utils.printDebug("opponent Stat mod: " .. stat)
 						local statRating = 0
 						if modifier < 0 then
 							-- ignore enemy stat raises for now (only 2 moves -> swagger and flatter)
 							statRating = RS.ModifierAndRatings.RatingOnHitEffect.RatingEnemyStatDrop or 0
 						end
 						iMoves[i].effectRating = iMoves[i].effectRating - chance * modifier * statRating
-						Utils.printDebug("new effect rating: " .. iMoves[i].effectRating)
 					end
 
 					-- rate the move's value regarding status drops / increases on the user
@@ -671,7 +583,6 @@ local function AdaptiveRating()
 					chance = (ModifiesOwnStat[id] or {})["chance"] or 0
 					chance = math.min(chance * (ownAbility == AbilityData.Values.SereneGraceId and 2 or 1), 1)
 					for _, stat in ipairs((ModifiesOwnStat[id] or {})["stats"] or {}) do
-						Utils.printDebug("own Stat mod: " .. stat)
 						local statRating = 0
 						if modifier > 0 and (stat == Stats.SPA or stat == Stats.ATK) then
 							statRating = RS.ModifierAndRatings.RatingOnHitEffect.RatingOwnOffensiveStatIncrease or 0
@@ -681,7 +592,6 @@ local function AdaptiveRating()
 							statRating = RS.ModifierAndRatings.RatingOnHitEffect.RatingLossOwnStatDrop or 0
 						end
 						iMoves[i].effectRating = iMoves[i].effectRating + chance * modifier * statRating * setupAdjustment
-						Utils.printDebug("new effect rating: " .. iMoves[i].effectRating)
 					end
 					
 					if MoveData.StatusMovesWillFail[i] then
@@ -713,7 +623,6 @@ local function AdaptiveRating()
 						if not iMoves[i].move.category == MoveData.Categories.STATUS then
 							perfectAccuracyModifier = RS.ModifierAndRatings.ModifierPerfectAccuracy or 1
 						end
-						Utils.printDebug("has perfect accuracy: " .. perfectAccuracyModifier)
 					end
 					accuracy = accuracy / 100
 					if accuracy == 1 and iMoves[i].powerRating > 0 then conditionsAchieved[conditions.hasFullyAccurateDamagingMove] = true end
@@ -728,8 +637,6 @@ local function AdaptiveRating()
 						accuracyPenaltyModifier = accuracyPenaltyModifier * (RS.ModifierAndRatings.ModifierTripleKickAccuracyPenalty or 1)
 					end
 					iMoves[i].accuracyRating = 1 - (1 - accuracy) * (accuracyPenaltyModifier or 1)
-					Utils.printDebug("accuracy modifer: " .. iMoves[i].accuracyRating)
-					Utils.printDebug("pp rating: " .. iMoves[i].ppRating)
 
 					iMoves[i].rating = (iMoves[i].powerRating + iMoves[i].effectRating) * iMoves[i].accuracyRating * iMoves[i].ppRating
 				end
@@ -737,41 +644,33 @@ local function AdaptiveRating()
 				if HasPreparationTurn[id] or 0 > 0 then
 					if HasPreparationTurn[id] > 2 then
 						iMoves[i].rating = iMoves[i].rating * (RS.ModifierAndRatings.ModifierHasSemiInvinciblePreparationTurn or 1)
-						Utils.printDebug("semi-invincible turn: " .. iMoves[i].rating)
 					elseif (HasPreparationTurn[id] == 2) and (ownAbility == AbilityData.Values.DroughtId) then
 						iMoves[i].rating = iMoves[i].rating * (RS.ModifierAndRatings.ModifierHasSkippedPreparationTurn or 1)
-						Utils.printDebug("solar beam with drought: " .. iMoves[i].rating)
 					else
 						iMoves[i].rating = iMoves[i].rating * (RS.ModifierAndRatings.ModifierHasGenericPreparationTurn or 1)
-						Utils.printDebug("generic preparation: " .. iMoves[i].rating)
 					end
 				end
 
 				-- it move steals item, we give it a minimum rating of ItemStealMinimumRating
 				if IsItemStealMove[id] then
 					iMoves[i].rating = math.max(iMoves[i].rating, RS.ModifierAndRatings.RatingItemStealMinimum)
-					Utils.printDebug("stealing item move: " .. iMoves[i].rating)
 				end
 				-- makes mon skip turn afterwards (like Hyper Beam) or the mon has no truant (we handle truant separately)
 				if SkipsTurnAfterwards[id] and ownAbility ~= AbilityData.Values.TruantId then
 					iMoves[i].rating = iMoves[i].rating * (RS.ModifierAndRatings.ModifierSkipTurnAfterwards or 1)
-					Utils.printDebug("skips turn: " .. iMoves[i].rating)
 				end
 				-- for moves that hit after 3 turns (yawn, future sight, doom desire)
 				if IsHitAfter3TurnsMove[id] then
 					iMoves[i].rating = iMoves[i].rating * (RS.ModifierAndRatings.ModifierHitsAfter3Turns or 1)
-					Utils.printDebug("hits after 3 turns: " .. iMoves[i].rating)
 				end
 				-- locking self in (like petal dance)
 				if LockInMoves[id] and ownAbility ~= AbilityData.Values.TruantId then
 					iMoves[i].rating = iMoves[i].rating * (RS.ModifierAndRatings.ModifierLockInMove or 1)
-					Utils.printDebug("lock in move: " .. iMoves[i].rating)
 				end
 				-- for moves that confuse self (there is no move that confuses self while truant)
 				if ConfusesSelf[id] and ownAbility ~= (AbilityData.Values.OwnTempoId or 20)
 					and ownAbility ~= AbilityData.Values.TruantId then
 					iMoves[i].rating = iMoves[i].rating * (RS.ModifierAndRatings.ModifierConfusesSelf or 1)
-					Utils.printDebug("self confusion and no own tempo: " .. iMoves[i].rating)
 				end
 				-- moves with specific (json input) rating modifiers
 				if RS.ModifierAndRatings.ModifierMove[tostring(id)] then
@@ -782,15 +681,12 @@ local function AdaptiveRating()
 
 				if RequiresOpponentAsleep[id] then
 					iMoves[i].conditionsToCheck[conditions.hasSleepMove] = true
-					Utils.printDebug("requires sleep move: " .. iMoves[i].rating)
 				end
 				if RequiresSelfSleep[id] then
 					iMoves[i].conditionsToCheck[conditions.hasRest] = true
-					Utils.printDebug("requires Rest: " .. iMoves[i].rating)
 				end
 				if BonusIfEnemyParalyzed[id] then
 					iMoves[i].conditionsToCheck[conditions.hasParaMove] = true
-					Utils.printDebug("requires para move: " .. iMoves[i].rating)
 				end
 			end
 			
@@ -798,26 +694,21 @@ local function AdaptiveRating()
 				iMoves[i].rating = iMoves[i].rating * (RS.ModifierAndRatings.ModifierSkipTurnAfterwards or 1) * (RS.ModifierAndRatings.ModifierTruantExtraPenalty or 1)
 			end
 
-			Utils.printDebug("preliminary move rating: " .. iMoves[i].rating or 0)
 		end
-		Utils.printDebug("---------")
 
 		for i, id in ipairs(moves) do
 			for condition, achieved in pairs(conditionsAchieved) do
-				if iMoves[i].conditionsToCheck[condition] and not debug then
-					Utils.printDebug("checking condition: " .. condition)
+				if iMoves[i].conditionsToCheck[condition] and not print_ratings then
 					iMoves[i].rating = iMoves[i].rating + (resultingRating[condition] or 0)
 					iMoves[i].rating = iMoves[i].rating * (resultingModifier[condition] or 1)
 				end
 			end
-			Utils.printDebug("final move rating: " .. iMoves[i].rating or 0)
 
-			if debug then
+			if print_ratings then
 				file:write(iMoves[i].rating, "\n")
 			end
 			movesRating = movesRating + math.max(iMoves[i].rating, 0)
 		end
-		Utils.printDebug("total final move Rating: " .. movesRating)
 		ratingTotal = ratingTotal + movesRating
 
 		-- checking various conditions, calculating total rating
@@ -835,20 +726,15 @@ local function AdaptiveRating()
 			offenseRating = math.min(math.max(spAtkRating, 0) + math.max(phAtkRating, 0), RS.Stats.Offense.MaxTotalRating or 20)
 		end
 		ratingTotal = ratingTotal + offenseRating
-		Utils.printDebug("offense rating: " .. offenseRating)
 
 		if conditionsAchieved[conditions.hasShedCoverage] then
 			ratingTotal = ratingTotal + RS.ModifierAndRatings.RatingShedCoverage or 0
-			Utils.printDebug("shed coverage: " .. RS.ModifierAndRatings.RatingShedCoverage or 0)
 		end
 		if conditionsAchieved[conditions.hasFullyAccurateDamagingMove] then
 			ratingTotal = ratingTotal + RS.ModifierAndRatings.RatingHasFullyAccurateDamagingMove or 0,
-			Utils.printDebug("has fully accurate damaging move: " .. RS.ModifierAndRatings.RatingHasFullyAccurateDamagingMove or 0)
 		end
 
-		Utils.printDebug(".........................")
-		Utils.printDebug("total Rating: " .. ratingTotal)
-		if debug then
+		if print_ratings then
 			file:close()
 		end
 
